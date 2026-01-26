@@ -107,7 +107,7 @@ describe("Vaccination Warnings", () => {
     const vaccination = {
       id: "vax-1",
       petId: "pet-1",
-      vaccineName: "Rabies",
+      name: "Rabies",
       dateAdministered: new Date(Date.now() - 86400000 * 351).toISOString(), // ~351 days ago
       expirationDate: new Date(Date.now() + 86400000 * 14).toISOString(), // 14 days from now
       createdAt: new Date().toISOString(),
@@ -127,7 +127,7 @@ describe("Vaccination Warnings", () => {
     const expiredVaccination = {
       id: "vax-2",
       petId: "pet-1",
-      vaccineName: "Distemper",
+      name: "Distemper",
       dateAdministered: new Date(Date.now() - 86400000 * 400).toISOString(),
       expirationDate: new Date(Date.now() - 86400000 * 35).toISOString(), // Expired 35 days ago
       createdAt: new Date().toISOString(),

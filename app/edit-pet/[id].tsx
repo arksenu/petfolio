@@ -45,9 +45,9 @@ export default function EditPetScreen() {
       setName(pet.name);
       setSpecies(pet.species);
       setBreed(pet.breed);
-      setDateOfBirth(new Date(pet.dateOfBirth));
-      setWeight(pet.weight.value > 0 ? pet.weight.value.toString() : "");
-      setWeightUnit(pet.weight.unit);
+      if (pet.dateOfBirth) setDateOfBirth(new Date(pet.dateOfBirth));
+      setWeight(pet.weight ? pet.weight.toString() : "");
+      setWeightUnit(pet.weightUnit || 'lb');
       setMicrochipNumber(pet.microchipNumber || "");
       setPhotoUri(pet.photoUri);
     }
@@ -116,10 +116,8 @@ export default function EditPetScreen() {
         species,
         breed: breed.trim(),
         dateOfBirth: dateOfBirth.toISOString(),
-        weight: {
-          value: parseFloat(weight) || 0,
-          unit: weightUnit,
-        },
+        weight: parseFloat(weight) || undefined,
+        weightUnit,
         microchipNumber: microchipNumber.trim() || undefined,
         photoUri,
       });

@@ -1,10 +1,11 @@
+import { z } from "zod";
 import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import * as db from "./db";
 
 export const appRouter = router({
-  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
@@ -17,12 +18,175 @@ export const appRouter = router({
     }),
   }),
 
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  // Pet sync routes
+  pets: router({
+    // Get all user's pets
+    list: protectedProcedure.query(({ ctx }) => {
+      return db.getUserPets(ctx.user.id);
+    }),
+
+    // Upsert a pet (create or update)
+    upsert: protectedProcedure
+      .input(z.object({
+        localId: z.string(),
+        name: z.string().min(1).max(255),
+        species: z.string().min(1).max(64),
+        breed: z.string().max(255).nullable().optional(),
+        dateOfBirth: z.date().nullable().optional(),
+        weight: z.string().nullable().optional(), // Decimal as string
+        weightUnit: z.string().max(10).optional(),
+        photoUri: z.string().nullable().optional(),
+        microchipNumber: z.string().max(64).nullable().optional(),
+      }))
+      .mutation(({ ctx, input }) => {
+        return db.upsertPet(ctx.user.id, input);
+      }),
+
+    // Delete a pet
+    delete: protectedProcedure
+      .input(z.object({ localId: z.string() }))
+      .mutation(({ ctx, input }) => {
+        return db.deletePet(ctx.user.id, input.localId);
+      }),
+  }),
+
+  // Document routes
+  documents: router({
+    // Get documents for a pet or all user documents
+    list: protectedProcedure
+      .input(z.object({ petLocalId: z.string().optional() }).optional())
+      .query(({ ctx, input }) => {
+        return db.getPetDocuments(ctx.user.id, input?.petLocalId);
+      }),
+
+    // Upsert a document
+    upsert: protectedProcedure
+      .input(z.object({
+        petLocalId: z.string(),
+        localId: z.string(),
+        title: z.string().min(1).max(255),
+        category: z.string().min(1).max(64),
+        date: z.date(),
+        fileUri: z.string().nullable().optional(),
+        fileType: z.string().max(32).optional(),
+        fileName: z.string().max(255).nullable().optional(),
+        notes: z.string().nullable().optional(),
+      }))
+      .mutation(({ ctx, input }) => {
+        const { petLocalId, ...data } = input;
+        return db.upsertDocument(ctx.user.id, petLocalId, data);
+      }),
+
+    // Delete a document
+    delete: protectedProcedure
+      .input(z.object({ localId: z.string() }))
+      .mutation(({ ctx, input }) => {
+        return db.deleteDocument(ctx.user.id, input.localId);
+      }),
+
+    // Search documents
+    search: protectedProcedure
+      .input(z.object({ query: z.string().min(1) }))
+      .query(({ ctx, input }) => {
+        return db.searchDocuments(ctx.user.id, input.query);
+      }),
+  }),
+
+  // Vaccination routes
+  vaccinations: router({
+    list: protectedProcedure
+      .input(z.object({ petLocalId: z.string() }))
+      .query(({ ctx, input }) => {
+        return db.getPetVaccinations(ctx.user.id, input.petLocalId);
+      }),
+
+    upsert: protectedProcedure
+      .input(z.object({
+        petLocalId: z.string(),
+        localId: z.string(),
+        name: z.string().min(1).max(255),
+        dateAdministered: z.date(),
+        expirationDate: z.date().nullable().optional(),
+        veterinarian: z.string().max(255).nullable().optional(),
+        notes: z.string().nullable().optional(),
+      }))
+      .mutation(({ ctx, input }) => {
+        const { petLocalId, ...data } = input;
+        return db.upsertVaccination(ctx.user.id, petLocalId, data);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ localId: z.string() }))
+      .mutation(({ ctx, input }) => {
+        return db.deleteVaccination(ctx.user.id, input.localId);
+      }),
+  }),
+
+  // Reminder routes
+  reminders: router({
+    list: protectedProcedure
+      .input(z.object({ petLocalId: z.string() }))
+      .query(({ ctx, input }) => {
+        return db.getPetReminders(ctx.user.id, input.petLocalId);
+      }),
+
+    upsert: protectedProcedure
+      .input(z.object({
+        petLocalId: z.string(),
+        localId: z.string(),
+        title: z.string().min(1).max(255),
+        date: z.date(),
+        time: z.string().max(10).nullable().optional(),
+        isEnabled: z.boolean().optional(),
+        notificationId: z.string().max(64).nullable().optional(),
+      }))
+      .mutation(({ ctx, input }) => {
+        const { petLocalId, ...data } = input;
+        return db.upsertReminder(ctx.user.id, petLocalId, data);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ localId: z.string() }))
+      .mutation(({ ctx, input }) => {
+        return db.deleteReminder(ctx.user.id, input.localId);
+      }),
+  }),
+
+  // Weight history routes
+  weight: router({
+    list: protectedProcedure
+      .input(z.object({ petLocalId: z.string() }))
+      .query(({ ctx, input }) => {
+        return db.getPetWeightHistory(ctx.user.id, input.petLocalId);
+      }),
+
+    add: protectedProcedure
+      .input(z.object({
+        petLocalId: z.string(),
+        localId: z.string(),
+        weight: z.string(), // Decimal as string
+        weightUnit: z.string().max(10),
+        date: z.date(),
+        notes: z.string().nullable().optional(),
+      }))
+      .mutation(({ ctx, input }) => {
+        const { petLocalId, ...data } = input;
+        return db.addWeightEntry(ctx.user.id, petLocalId, data);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ localId: z.string() }))
+      .mutation(({ ctx, input }) => {
+        return db.deleteWeightEntry(ctx.user.id, input.localId);
+      }),
+  }),
+
+  // Full sync endpoint - get all user data at once
+  sync: router({
+    getData: protectedProcedure.query(({ ctx }) => {
+      return db.getUserSyncData(ctx.user.id);
+    }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

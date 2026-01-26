@@ -10,11 +10,9 @@ export interface Pet {
   name: string;
   species: Species;
   breed: string;
-  dateOfBirth: string; // ISO date string
-  weight: {
-    value: number;
-    unit: WeightUnit;
-  };
+  dateOfBirth?: string; // ISO date string
+  weight?: number;
+  weightUnit?: WeightUnit;
   microchipNumber?: string;
   photoUri?: string;
   createdAt: string;
@@ -39,11 +37,11 @@ export interface PetDocument {
 export interface Vaccination {
   id: string;
   petId: string;
-  vaccineName: string;
+  name: string;
   dateAdministered: string; // ISO date string
-  expirationDate: string; // ISO date string
-  vetClinicName?: string;
-  documentId?: string;
+  expirationDate?: string; // ISO date string
+  veterinarian?: string;
+  notes?: string;
   createdAt: string;
 }
 
@@ -52,7 +50,19 @@ export interface Reminder {
   petId: string;
   title: string;
   date: string; // ISO date string
+  time?: string; // Time string like "09:00"
   isEnabled: boolean;
+  notificationId?: string;
+  createdAt: string;
+}
+
+export interface WeightEntry {
+  id: string;
+  petId: string;
+  weight: number;
+  weightUnit: WeightUnit;
+  date: string; // ISO date string
+  notes?: string;
   createdAt: string;
 }
 
@@ -86,7 +96,9 @@ export const DOCUMENT_CATEGORIES: { value: DocumentCategory; label: string }[] =
 ];
 
 // Helper function to calculate vaccination status
-export function getVaccinationStatus(expirationDate: string): VaccinationStatus {
+export function getVaccinationStatus(expirationDate?: string): VaccinationStatus {
+  if (!expirationDate) return 'current';
+  
   const now = new Date();
   const expDate = new Date(expirationDate);
   const daysUntilExpiration = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));

@@ -1,7 +1,7 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Reminder, Vaccination, getVaccinationStatus } from "@/shared/pet-types";
+import { Reminder, Vaccination } from "@/shared/pet-types";
 
 const NOTIFICATION_SETTINGS_KEY = "petfolio_notification_settings";
 
@@ -85,6 +85,12 @@ export async function scheduleReminderNotification(
 
   const triggerDate = new Date(reminder.date);
   
+  // Apply time if specified
+  if (reminder.time) {
+    const [hours, minutes] = reminder.time.split(':').map(Number);
+    triggerDate.setHours(hours, minutes, 0, 0);
+  }
+  
   // Don't schedule if the date is in the past
   if (triggerDate <= new Date()) {
     return null;
@@ -129,6 +135,11 @@ export async function scheduleVaccinationWarnings(
     return [];
   }
 
+  // Skip if no expiration date
+  if (!vaccination.expirationDate) {
+    return [];
+  }
+
   const notificationIds: string[] = [];
   const expirationDate = new Date(vaccination.expirationDate);
   const now = new Date();
@@ -148,7 +159,7 @@ export async function scheduleVaccinationWarnings(
       const id = await Notifications.scheduleNotificationAsync({
         content: {
           title: "Vaccination Expiring Soon",
-          body: `${petName}'s ${vaccination.vaccineName} vaccination expires in 7 days`,
+          body: `${petName}'s ${vaccination.name} vaccination expires in 7 days`,
           data: { type: "vaccination", vaccinationId: vaccination.id, petId: vaccination.petId },
           sound: true,
         },
@@ -170,7 +181,7 @@ export async function scheduleVaccinationWarnings(
       const id = await Notifications.scheduleNotificationAsync({
         content: {
           title: "Vaccination Expiring Tomorrow",
-          body: `${petName}'s ${vaccination.vaccineName} vaccination expires tomorrow!`,
+          body: `${petName}'s ${vaccination.name} vaccination expires tomorrow!`,
           data: { type: "vaccination", vaccinationId: vaccination.id, petId: vaccination.petId },
           sound: true,
         },
@@ -191,7 +202,7 @@ export async function scheduleVaccinationWarnings(
       const id = await Notifications.scheduleNotificationAsync({
         content: {
           title: "Vaccination Expired",
-          body: `${petName}'s ${vaccination.vaccineName} vaccination has expired. Please schedule a renewal.`,
+          body: `${petName}'s ${vaccination.name} vaccination has expired. Please schedule a renewal.`,
           data: { type: "vaccination", vaccinationId: vaccination.id, petId: vaccination.petId },
           sound: true,
         },

@@ -91,10 +91,8 @@ export default function AddPetScreen() {
         species,
         breed: breed.trim(),
         dateOfBirth: dateOfBirth.toISOString(),
-        weight: {
-          value: parseFloat(weight) || 0,
-          unit: weightUnit,
-        },
+        weight: parseFloat(weight) || undefined,
+        weightUnit,
         microchipNumber: microchipNumber.trim() || undefined,
         photoUri,
       });

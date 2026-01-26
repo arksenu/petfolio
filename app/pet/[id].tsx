@@ -205,16 +205,16 @@ export default function PetProfileScreen() {
   const renderVaccinationCard = ({ item }: { item: Vaccination }) => {
     const status = getVaccinationStatus(item.expirationDate);
     const statusColor = getStatusColor(status);
-    const daysUntil = Math.ceil(
-      (new Date(item.expirationDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const daysUntil = item.expirationDate 
+      ? Math.ceil((new Date(item.expirationDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+      : 0;
 
     return (
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.cardHeader}>
           <View style={styles.vaccinationHeader}>
             <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-            <Text style={[styles.cardTitle, { color: colors.foreground }]}>{item.vaccineName}</Text>
+            <Text style={[styles.cardTitle, { color: colors.foreground }]}>{item.name}</Text>
           </View>
           <TouchableOpacity onPress={() => handleDeleteVaccination(item.id)}>
             <IconSymbol name="trash.fill" size={18} color={colors.error} />
@@ -225,15 +225,17 @@ export default function PetProfileScreen() {
             Given: {formatDate(item.dateAdministered)}
           </Text>
           <Text style={[styles.expirationText, { color: statusColor }]}>
-            {status === "expired"
+            {!item.expirationDate
+              ? "No expiration"
+              : status === "expired"
               ? "Expired"
               : status === "expiring_soon"
               ? `Expires in ${daysUntil} days`
               : `Expires: ${formatDate(item.expirationDate)}`}
           </Text>
         </View>
-        {item.vetClinicName && (
-          <Text style={[styles.cardNotes, { color: colors.muted }]}>{item.vetClinicName}</Text>
+        {item.veterinarian && (
+          <Text style={[styles.cardNotes, { color: colors.muted }]}>{item.veterinarian}</Text>
         )}
       </View>
     );
@@ -336,15 +338,25 @@ export default function PetProfileScreen() {
             <View style={[styles.statItem, { backgroundColor: colors.surface }]}>
               <Text style={[styles.statLabel, { color: colors.muted }]}>Age</Text>
               <Text style={[styles.statValue, { color: colors.foreground }]}>
-                {calculateAge(pet.dateOfBirth)}
+                {pet.dateOfBirth ? calculateAge(pet.dateOfBirth) : "Unknown"}
               </Text>
             </View>
-            <View style={[styles.statItem, { backgroundColor: colors.surface }]}>
+            <TouchableOpacity
+              onPress={() => {
+                if (Platform.OS !== "web") {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+                router.push(`/weight-history/${id}` as any);
+              }}
+              style={[styles.statItem, { backgroundColor: colors.surface }]}
+              activeOpacity={0.7}
+            >
               <Text style={[styles.statLabel, { color: colors.muted }]}>Weight</Text>
               <Text style={[styles.statValue, { color: colors.foreground }]}>
-                {pet.weight.value > 0 ? `${pet.weight.value} ${pet.weight.unit}` : "—"}
+                {pet.weight ? `${pet.weight} ${pet.weightUnit || 'lb'}` : "—"}
               </Text>
-            </View>
+              <IconSymbol name="chart.line.uptrend.xyaxis" size={12} color={colors.primary} />
+            </TouchableOpacity>
             {pet.microchipNumber && (
               <View style={[styles.statItem, { backgroundColor: colors.surface }]}>
                 <Text style={[styles.statLabel, { color: colors.muted }]}>Microchip</Text>
@@ -454,7 +466,7 @@ export default function PetProfileScreen() {
                 <FlatList
                   data={vaccinations.sort(
                     (a, b) =>
-                      new Date(a.expirationDate).getTime() - new Date(b.expirationDate).getTime()
+                      (a.expirationDate ? new Date(a.expirationDate).getTime() : 0) - (b.expirationDate ? new Date(b.expirationDate).getTime() : 0)
                   )}
                   keyExtractor={(item) => item.id}
                   renderItem={renderVaccinationCard}

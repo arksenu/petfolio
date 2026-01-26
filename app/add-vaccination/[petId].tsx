@@ -71,10 +71,10 @@ export default function AddVaccinationScreen() {
     try {
       await addVaccination({
         petId: petId || "",
-        vaccineName: finalVaccineName,
+        name: finalVaccineName,
         dateAdministered: dateAdministered.toISOString(),
         expirationDate: expirationDate.toISOString(),
-        vetClinicName: vetClinicName.trim() || undefined,
+        veterinarian: vetClinicName.trim() || undefined,
       });
 
       if (Platform.OS !== "web") {

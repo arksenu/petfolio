@@ -23,6 +23,13 @@ export default function HomeScreen() {
     router.push("/add-pet");
   };
 
+  const handleSearch = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    router.push("/search");
+  };
+
   const handlePetPress = (petId: string) => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -40,14 +47,14 @@ export default function HomeScreen() {
         const status = getVaccinationStatus(v.expirationDate);
         return status === 'expiring_soon' || status === 'expired';
       })
-      .sort((a, b) => new Date(a.expirationDate).getTime() - new Date(b.expirationDate).getTime())[0];
+      .sort((a, b) => (a.expirationDate ? new Date(a.expirationDate).getTime() : 0) - (b.expirationDate ? new Date(b.expirationDate).getTime() : 0))[0];
 
     if (expiringVax) {
       const status = getVaccinationStatus(expiringVax.expirationDate);
       if (status === 'expired') {
-        return `${expiringVax.vaccineName} expired`;
+        return `${expiringVax.name} expired`;
       }
-      return `${expiringVax.vaccineName} expiring ${formatDate(expiringVax.expirationDate)}`;
+      return `${expiringVax.name} expiring ${expiringVax.expirationDate ? formatDate(expiringVax.expirationDate) : ''}`;
     }
 
     // Check for upcoming reminders
@@ -87,7 +94,7 @@ export default function HomeScreen() {
               {item.breed ? ` · ${item.breed}` : ""}
             </Text>
             <Text style={[styles.petAge, { color: colors.muted }]}>
-              {calculateAge(item.dateOfBirth)}
+              {item.dateOfBirth ? calculateAge(item.dateOfBirth) : 'Unknown age'}
             </Text>
           </View>
           <IconSymbol name="chevron.right" size={20} color={colors.muted} />
@@ -150,6 +157,9 @@ export default function HomeScreen() {
     <ScreenContainer>
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>My Pets</Text>
+        <TouchableOpacity onPress={handleSearch} style={styles.searchButton}>
+          <IconSymbol name="magnifyingglass" size={22} color={colors.foreground} />
+        </TouchableOpacity>
       </View>
 
       {pets.length === 0 ? (
@@ -179,6 +189,9 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 16,
@@ -186,6 +199,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 32,
     fontWeight: "bold",
+  },
+  searchButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
   },
   listContent: {
     paddingHorizontal: 20,

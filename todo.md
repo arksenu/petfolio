@@ -97,3 +97,8 @@
 
 ## Features (v1.5)
 - [x] In-app PDF viewer - display PDFs directly with scrolling support
+
+## Features (v1.6)
+- [x] Cloud sync - sync pet data to backend for signed-in users
+- [x] Document search - search documents by title/category across all pets
+- [x] Pet weight tracking - record weight history with visual chart
