@@ -85,3 +85,7 @@
 - [x] Fix date picker - date wheel not visible in modal on iOS
 - [x] Enable PDF and document file uploads (not just images)
 - [x] Add PDF viewer for viewing uploaded PDF documents
+
+## Bug Fixes (v1.3)
+- [x] Create fully custom date picker with scrollable wheels (native picker not working in Expo Go)
+- [x] Build in-app PDF viewer using WebView instead of external app

@@ -15,7 +15,7 @@ import * as Haptics from "expo-haptics";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { DatePickerModal, TimePickerModal } from "@/components/date-picker-modal";
+import { CustomDatePicker, CustomTimePicker } from "@/components/custom-date-picker";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
 
@@ -172,7 +172,7 @@ export default function AddReminderScreen() {
             {/* Date */}
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.foreground }]}>Date</Text>
-              <DatePickerModal
+              <CustomDatePicker
                 value={date}
                 onChange={handleDateChange}
                 minimumDate={new Date()}
@@ -183,7 +183,7 @@ export default function AddReminderScreen() {
             {/* Time */}
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.foreground }]}>Time</Text>
-              <TimePickerModal
+              <CustomTimePicker
                 value={date}
                 onChange={handleTimeChange}
                 label="Reminder Time"

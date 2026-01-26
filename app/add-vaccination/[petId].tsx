@@ -15,7 +15,7 @@ import * as Haptics from "expo-haptics";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { DatePickerModal } from "@/components/date-picker-modal";
+import { CustomDatePicker } from "@/components/custom-date-picker";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
 import { COMMON_VACCINES } from "@/shared/pet-types";
@@ -169,7 +169,7 @@ export default function AddVaccinationScreen() {
             {/* Date Administered */}
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.foreground }]}>Date Administered</Text>
-              <DatePickerModal
+              <CustomDatePicker
                 value={dateAdministered}
                 onChange={setDateAdministered}
                 maximumDate={new Date()}
@@ -185,7 +185,7 @@ export default function AddVaccinationScreen() {
                   <Text style={[styles.autoLabel, { color: colors.primary }]}>Auto-calculated</Text>
                 )}
               </View>
-              <DatePickerModal
+              <CustomDatePicker
                 value={expirationDate}
                 onChange={setExpirationDate}
                 minimumDate={dateAdministered}

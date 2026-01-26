@@ -18,7 +18,7 @@ import * as Haptics from "expo-haptics";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { DatePickerModal } from "@/components/date-picker-modal";
+import { CustomDatePicker } from "@/components/custom-date-picker";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
 import { DocumentCategory, DOCUMENT_CATEGORIES } from "@/shared/pet-types";
@@ -326,7 +326,7 @@ export default function AddDocumentScreen() {
             {/* Date */}
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.foreground }]}>Document Date</Text>
-              <DatePickerModal
+              <CustomDatePicker
                 value={date}
                 onChange={setDate}
                 maximumDate={new Date()}

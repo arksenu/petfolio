@@ -8,8 +8,7 @@ import {
   Platform,
   Share,
   Alert,
-  Linking,
-  ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -21,6 +20,7 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
+import { WebView } from "react-native-webview";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -40,6 +40,8 @@ export default function ViewDocumentScreen() {
   const pet = document ? getPet(document.petId) : null;
 
   const [showControls, setShowControls] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(true);
+  const [pdfError, setPdfError] = useState(false);
 
   // Pinch-to-zoom and pan values
   const scale = useSharedValue(1);
@@ -152,62 +154,119 @@ export default function ViewDocumentScreen() {
     }
   };
 
-  const handleOpenExternal = async () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  // Get PDF viewer URL - use Google Docs viewer for remote PDFs
+  const getPdfViewerUrl = () => {
+    const fileUri = document.fileUri;
+    
+    // For local files, we need to use a different approach
+    // Check if it's a local file (starts with file:// or content://)
+    if (fileUri.startsWith("file://") || fileUri.startsWith("content://")) {
+      // For local files, return the URI directly - WebView can handle some local files
+      return fileUri;
     }
-
-    try {
-      const supported = await Linking.canOpenURL(document.fileUri);
-      if (supported) {
-        await Linking.openURL(document.fileUri);
-      } else {
-        Alert.alert("Error", "Cannot open this file type. Try sharing it to another app.");
-      }
-    } catch (error) {
-      Alert.alert("Error", "Failed to open document.");
-    }
+    
+    // For remote URLs, use Google Docs viewer
+    const encodedUrl = encodeURIComponent(fileUri);
+    return `https://docs.google.com/gview?embedded=true&url=${encodedUrl}`;
   };
 
-  // Render PDF or document view
-  const renderPdfOrDocumentView = () => {
+  // Render PDF viewer with WebView
+  const renderPdfViewer = () => {
+    const viewerUrl = getPdfViewerUrl();
+    const isLocalFile = document.fileUri.startsWith("file://") || document.fileUri.startsWith("content://");
+    
     return (
       <View style={styles.pdfContainer}>
-        <View style={[styles.pdfPlaceholder, { backgroundColor: colors.surface }]}>
-          <View style={[styles.pdfIconContainer, { backgroundColor: isPdf ? "#E74C3C20" : colors.primary + "20" }]}>
-            <IconSymbol 
-              name={isPdf ? "doc.fill" : "doc.text.fill"} 
-              size={64} 
-              color={isPdf ? "#E74C3C" : colors.primary} 
-            />
+        {/* Loading indicator */}
+        {pdfLoading && (
+          <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.muted }]}>
+              Loading document...
+            </Text>
           </View>
-          <Text style={[styles.pdfFileName, { color: colors.foreground }]}>
-            {document.fileName || document.title}
-          </Text>
-          <Text style={[styles.pdfFileType, { color: colors.muted }]}>
-            {isPdf ? "PDF Document" : "Document File"}
-          </Text>
-          
-          <View style={styles.pdfActions}>
-            <TouchableOpacity
-              onPress={handleOpenExternal}
-              style={[styles.pdfActionButton, { backgroundColor: colors.primary }]}
-            >
-              <IconSymbol name="arrow.up.right.square" size={20} color="#FFFFFF" />
-              <Text style={styles.pdfActionText}>Open in External App</Text>
-            </TouchableOpacity>
-            
+        )}
+        
+        {/* Error state */}
+        {pdfError && (
+          <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+            <View style={[styles.errorIconContainer, { backgroundColor: colors.error + "20" }]}>
+              <IconSymbol name="exclamationmark.circle.fill" size={48} color={colors.error} />
+            </View>
+            <Text style={[styles.errorTitle, { color: colors.foreground }]}>
+              Unable to Load Document
+            </Text>
+            <Text style={[styles.errorMessage, { color: colors.muted }]}>
+              {isLocalFile 
+                ? "Local PDF files cannot be previewed in-app. Use the share button to open in another app."
+                : "The document couldn't be loaded. Please try again or share to another app."}
+            </Text>
             <TouchableOpacity
               onPress={handleShare}
-              style={[styles.pdfActionButtonSecondary, { borderColor: colors.border }]}
+              style={[styles.errorButton, { backgroundColor: colors.primary }]}
             >
-              <IconSymbol name="square.and.arrow.up" size={20} color={colors.primary} />
-              <Text style={[styles.pdfActionTextSecondary, { color: colors.primary }]}>Share</Text>
+              <IconSymbol name="square.and.arrow.up" size={20} color="#FFFFFF" />
+              <Text style={styles.errorButtonText}>Share Document</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        
+        {/* WebView for PDF */}
+        {!pdfError && (
+          <WebView
+            source={{ uri: viewerUrl }}
+            style={[styles.webView, pdfLoading && styles.hidden]}
+            onLoadStart={() => {
+              setPdfLoading(true);
+              setPdfError(false);
+            }}
+            onLoadEnd={() => setPdfLoading(false)}
+            onError={() => {
+              setPdfLoading(false);
+              setPdfError(true);
+            }}
+            onHttpError={() => {
+              setPdfLoading(false);
+              setPdfError(true);
+            }}
+            scalesPageToFit
+            javaScriptEnabled
+            domStorageEnabled
+            startInLoadingState={false}
+            allowsInlineMediaPlayback
+          />
+        )}
+      </View>
+    );
+  };
+
+  // Render document placeholder (for non-PDF documents like Word)
+  const renderDocumentPlaceholder = () => {
+    return (
+      <View style={styles.pdfContainer}>
+        <View style={[styles.placeholderContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.placeholderIconContainer, { backgroundColor: colors.primary + "20" }]}>
+            <IconSymbol name="doc.text.fill" size={64} color={colors.primary} />
+          </View>
+          <Text style={[styles.placeholderFileName, { color: colors.foreground }]}>
+            {document.fileName || document.title}
+          </Text>
+          <Text style={[styles.placeholderFileType, { color: colors.muted }]}>
+            Document File
+          </Text>
+          
+          <View style={styles.placeholderActions}>
+            <TouchableOpacity
+              onPress={handleShare}
+              style={[styles.placeholderButton, { backgroundColor: colors.primary }]}
+            >
+              <IconSymbol name="square.and.arrow.up" size={20} color="#FFFFFF" />
+              <Text style={styles.placeholderButtonText}>Share to Open</Text>
             </TouchableOpacity>
           </View>
           
-          <Text style={[styles.pdfHint, { color: colors.muted }]}>
-            Tap "Open in External App" to view the full document in your device's default viewer
+          <Text style={[styles.placeholderHint, { color: colors.muted }]}>
+            This document type requires an external app to view. Tap "Share to Open" to choose an app.
           </Text>
         </View>
       </View>
@@ -229,6 +288,16 @@ export default function ViewDocumentScreen() {
         </View>
       </GestureDetector>
     );
+  };
+
+  const renderContent = () => {
+    if (isPdf) {
+      return renderPdfViewer();
+    } else if (isDocument) {
+      return renderDocumentPlaceholder();
+    } else {
+      return renderImageViewer();
+    }
   };
 
   return (
@@ -254,17 +323,14 @@ export default function ViewDocumentScreen() {
                 {pet?.name} • {formatDate(document.date)}
               </Text>
             </View>
-            {!isPdf && !isDocument && (
-              <TouchableOpacity onPress={handleShare} style={styles.headerButton}>
-                <IconSymbol name="square.and.arrow.up" size={22} color="#FFFFFF" />
-              </TouchableOpacity>
-            )}
-            {(isPdf || isDocument) && <View style={styles.headerButton} />}
+            <TouchableOpacity onPress={handleShare} style={styles.headerButton}>
+              <IconSymbol name="square.and.arrow.up" size={22} color={isPdf || isDocument ? colors.foreground : "#FFFFFF"} />
+            </TouchableOpacity>
           </View>
         )}
 
         {/* Content */}
-        {isPdf || isDocument ? renderPdfOrDocumentView() : renderImageViewer()}
+        {renderContent()}
 
         {/* Footer Info - only for images */}
         {showControls && !isPdf && !isDocument && (
@@ -320,7 +386,6 @@ const styles = StyleSheet.create({
   headerCenter: {
     flex: 1,
     alignItems: "center",
-    paddingHorizontal: 8,
   },
   headerTitle: {
     fontSize: 17,
@@ -337,7 +402,7 @@ const styles = StyleSheet.create({
   },
   imageWrapper: {
     width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT * 0.7,
+    height: SCREEN_HEIGHT,
   },
   image: {
     width: "100%",
@@ -348,17 +413,15 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 10,
-    paddingTop: 16,
-    paddingBottom: Platform.OS === "ios" ? 40 : 24,
-    paddingHorizontal: 20,
-    alignItems: "center",
-    gap: 8,
+    padding: 20,
+    paddingBottom: Platform.OS === "ios" ? 40 : 20,
   },
   categoryBadge: {
+    alignSelf: "flex-start",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
+    marginBottom: 8,
   },
   categoryText: {
     color: "#FFFFFF",
@@ -366,97 +429,135 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   notesText: {
-    color: "rgba(255,255,255,0.8)",
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  hintText: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 8,
+  },
+  pdfContainer: {
+    flex: 1,
+    marginTop: Platform.OS === "ios" ? 110 : 90,
+  },
+  webView: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  hidden: {
+    opacity: 0,
+  },
+  loadingContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 5,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+  },
+  errorIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  errorMessage: {
     fontSize: 14,
     textAlign: "center",
     lineHeight: 20,
-  },
-  hintText: {
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  // PDF/Document styles
-  pdfContainer: {
-    flex: 1,
-    paddingTop: Platform.OS === "ios" ? 120 : 100,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  pdfPlaceholder: {
-    flex: 1,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  pdfIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  pdfFileName: {
-    fontSize: 18,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  pdfFileType: {
-    fontSize: 14,
-    marginBottom: 32,
-  },
-  pdfActions: {
-    width: "100%",
-    gap: 12,
     marginBottom: 24,
   },
-  pdfActionButton: {
+  errorButton: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
     borderRadius: 12,
     gap: 8,
   },
-  pdfActionText: {
+  errorButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
   },
-  pdfActionButtonSecondary: {
+  placeholderContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+  },
+  placeholderIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  placeholderFileName: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  placeholderFileType: {
+    fontSize: 14,
+    marginBottom: 24,
+  },
+  placeholderActions: {
+    marginBottom: 16,
+  },
+  placeholderButton: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
     borderRadius: 12,
-    borderWidth: 1,
     gap: 8,
   },
-  pdfActionTextSecondary: {
+  placeholderButtonText: {
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
   },
-  pdfHint: {
+  placeholderHint: {
     fontSize: 13,
     textAlign: "center",
     lineHeight: 18,
-    paddingHorizontal: 20,
+    maxWidth: 280,
   },
   pdfFooter: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    padding: 16,
     borderTopWidth: 1,
   },
   notesLabel: {
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "600",
     marginBottom: 4,
+    textTransform: "uppercase",
   },
   pdfNotesText: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

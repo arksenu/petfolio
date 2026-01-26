@@ -17,7 +17,7 @@ import * as Haptics from "expo-haptics";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { DatePickerModal } from "@/components/date-picker-modal";
+import { CustomDatePicker } from "@/components/custom-date-picker";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
 import { Species, WeightUnit, SPECIES_OPTIONS } from "@/shared/pet-types";
@@ -222,7 +222,7 @@ export default function AddPetScreen() {
             {/* Date of Birth */}
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.foreground }]}>Date of Birth</Text>
-              <DatePickerModal
+              <CustomDatePicker
                 value={dateOfBirth}
                 onChange={setDateOfBirth}
                 maximumDate={new Date()}
