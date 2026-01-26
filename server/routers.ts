@@ -4,6 +4,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
+import { storagePut } from "./storage";
 
 export const appRouter = router({
   system: systemRouter,
@@ -178,6 +179,34 @@ export const appRouter = router({
       .input(z.object({ localId: z.string() }))
       .mutation(({ ctx, input }) => {
         return db.deleteWeightEntry(ctx.user.id, input.localId);
+      }),
+  }),
+
+  // File upload endpoint
+  files: router({
+    upload: protectedProcedure
+      .input(z.object({
+        fileName: z.string().min(1).max(255),
+        fileType: z.string().min(1).max(100),
+        base64Data: z.string(), // Base64 encoded file data
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { fileName, fileType, base64Data } = input;
+        
+        // Generate a unique key with user ID and random suffix
+        const randomSuffix = Math.random().toString(36).substring(2, 10);
+        const timestamp = Date.now();
+        const extension = fileName.split('.').pop() || 'bin';
+        const safeFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const fileKey = `user-${ctx.user.id}/documents/${timestamp}-${randomSuffix}-${safeFileName}`;
+        
+        // Decode base64 to buffer
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        // Upload to S3
+        const { url } = await storagePut(fileKey, buffer, fileType);
+        
+        return { url, key: fileKey };
       }),
   }),
 

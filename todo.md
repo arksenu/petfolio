@@ -112,3 +112,9 @@
 - [x] Dose reminder notifications
 - [x] Refill reminder notifications
 - [x] Edit/delete medication functionality
+
+## Bug Fixes & Features (v1.8)
+- [x] Fix authentication state not updating after sign-in (Settings -> Account still shows "not signed in")
+- [x] Implement server-side document upload to S3 storage
+- [x] Update document viewer to use remote URLs for reliable PDF/image viewing
+- [x] Fix image/document display on real iOS devices (now uses cloud storage when signed in)

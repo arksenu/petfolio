@@ -9,6 +9,7 @@ import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { PetProvider } from "@/lib/pet-store";
+import { AuthProvider } from "@/lib/auth-context";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -83,8 +84,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
-          <PetProvider>
-            <Stack screenOptions={{ headerShown: false }}>
+          <AuthProvider>
+            <PetProvider>
+              <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="oauth/callback" />
               <Stack.Screen name="pet/[id]" options={{ presentation: "card" }} />
@@ -95,8 +97,9 @@ export default function RootLayout() {
               <Stack.Screen name="add-reminder/[petId]" options={{ presentation: "modal" }} />
               <Stack.Screen name="share/[petId]" options={{ presentation: "modal" }} />
             </Stack>
-            <StatusBar style="auto" />
-          </PetProvider>
+              <StatusBar style="auto" />
+            </PetProvider>
+          </AuthProvider>
         </QueryClientProvider>
       </trpc.Provider>
     </GestureHandlerRootView>

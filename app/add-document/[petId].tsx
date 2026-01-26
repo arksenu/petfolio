@@ -9,18 +9,22 @@ import {
   Alert,
   Platform,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { CustomDatePicker } from "@/components/custom-date-picker";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
+import { useAuth } from "@/hooks/use-auth";
+import { trpc } from "@/lib/trpc";
 import { DocumentCategory, DOCUMENT_CATEGORIES } from "@/shared/pet-types";
 
 // File type detection helper
@@ -37,11 +41,33 @@ function getFileType(uri: string, mimeType?: string): "image" | "pdf" | "documen
   return "document";
 }
 
+// Get MIME type from file extension
+function getMimeType(uri: string, fileType: "image" | "pdf" | "document"): string {
+  const ext = uri.split('.').pop()?.toLowerCase();
+  
+  if (fileType === "pdf") return "application/pdf";
+  if (fileType === "image") {
+    switch (ext) {
+      case "png": return "image/png";
+      case "gif": return "image/gif";
+      case "webp": return "image/webp";
+      case "heic": return "image/heic";
+      case "heif": return "image/heif";
+      default: return "image/jpeg";
+    }
+  }
+  if (ext === "doc") return "application/msword";
+  if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  return "application/octet-stream";
+}
+
 export default function AddDocumentScreen() {
   const router = useRouter();
   const { petId } = useLocalSearchParams<{ petId: string }>();
   const colors = useColors();
   const { addDocument, getPet } = usePetStore();
+  const { isAuthenticated } = useAuth();
+  const uploadFileMutation = trpc.files.upload.useMutation();
 
   const pet = getPet(petId || "");
 
@@ -53,6 +79,7 @@ export default function AddDocumentScreen() {
   const [fileType, setFileType] = useState<"image" | "pdf" | "document">("image");
   const [fileName, setFileName] = useState<string | undefined>();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
   if (!pet) {
     return (
@@ -131,6 +158,59 @@ export default function AddDocumentScreen() {
     }
   };
 
+  // Upload file to server and return the URL
+  const uploadFileToServer = async (localUri: string): Promise<string> => {
+    try {
+      setUploadProgress("Reading file...");
+      
+      // Read file as base64
+      let base64Data: string;
+      
+      if (Platform.OS === "web") {
+        // For web, fetch the blob and convert to base64
+        const response = await fetch(localUri);
+        const blob = await response.blob();
+        base64Data = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            // Remove data URL prefix (e.g., "data:image/jpeg;base64,")
+            const base64 = result.split(',')[1] || result;
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } else {
+        // For native, use FileSystem
+        base64Data = await FileSystem.readAsStringAsync(localUri, {
+          encoding: "base64",
+        });
+      }
+      
+      setUploadProgress("Uploading to cloud...");
+      
+      // Generate filename
+      const ext = localUri.split('.').pop() || (fileType === "pdf" ? "pdf" : "jpg");
+      const uploadFileName = fileName || `document-${Date.now()}.${ext}`;
+      const mimeType = getMimeType(localUri, fileType);
+      
+      // Upload to server
+      const result = await uploadFileMutation.mutateAsync({
+        fileName: uploadFileName,
+        fileType: mimeType,
+        base64Data,
+      });
+      
+      setUploadProgress(null);
+      return result.url;
+    } catch (error) {
+      setUploadProgress(null);
+      console.error("Upload error:", error);
+      throw error;
+    }
+  };
+
   const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert("Required Field", "Please enter a document title.");
@@ -148,11 +228,29 @@ export default function AddDocumentScreen() {
 
     setIsSubmitting(true);
     try {
+      let finalFileUri = fileUri;
+      
+      // If user is authenticated, upload to server for cloud storage
+      if (isAuthenticated) {
+        try {
+          finalFileUri = await uploadFileToServer(fileUri);
+          console.log("File uploaded to server:", finalFileUri);
+        } catch (uploadError) {
+          console.error("Server upload failed, using local URI:", uploadError);
+          // Fall back to local URI if upload fails
+          Alert.alert(
+            "Upload Notice",
+            "Could not upload to cloud. Document will be saved locally only.",
+            [{ text: "OK" }]
+          );
+        }
+      }
+      
       await addDocument({
         petId: petId || "",
         title: title.trim(),
         category,
-        fileUri,
+        fileUri: finalFileUri,
         fileType,
         fileName,
         date: date.toISOString(),
@@ -180,130 +278,149 @@ export default function AddDocumentScreen() {
     setFileType("image");
   };
 
-  const renderFilePreview = () => {
-    if (!fileUri) return null;
-
-    if (fileType === "image") {
-      return (
-        <View style={styles.previewContainer}>
-          <Image source={{ uri: fileUri }} style={styles.preview} contentFit="contain" />
-          <TouchableOpacity
-            onPress={clearFile}
-            style={[styles.removeButton, { backgroundColor: colors.error }]}
-          >
-            <IconSymbol name="xmark" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    // PDF or document preview
-    return (
-      <View style={[styles.documentPreview, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View style={[styles.documentIconContainer, { backgroundColor: fileType === "pdf" ? "#E74C3C20" : colors.primary + "20" }]}>
-          <IconSymbol 
-            name={fileType === "pdf" ? "doc.fill" : "doc.text.fill"} 
-            size={40} 
-            color={fileType === "pdf" ? "#E74C3C" : colors.primary} 
-          />
-        </View>
-        <View style={styles.documentInfo}>
-          <Text style={[styles.documentName, { color: colors.foreground }]} numberOfLines={2}>
-            {fileName || "Document"}
-          </Text>
-          <Text style={[styles.documentType, { color: colors.muted }]}>
-            {fileType === "pdf" ? "PDF Document" : "Document File"}
-          </Text>
-        </View>
-        <TouchableOpacity
-          onPress={clearFile}
-          style={[styles.removeDocButton, { backgroundColor: colors.error + "20" }]}
-        >
-          <IconSymbol name="xmark" size={18} color={colors.error} />
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
   return (
     <ScreenContainer edges={["top", "left", "right", "bottom"]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.container}
       >
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-            <IconSymbol name="xmark" size={24} color={colors.foreground} />
+            <IconSymbol name="xmark" size={20} color={colors.foreground} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>Add Document</Text>
-          <View style={styles.closeButton} />
+          <TouchableOpacity
+            onPress={handleSave}
+            disabled={isSubmitting || !title.trim() || !fileUri}
+            style={[
+              styles.saveButton,
+              { backgroundColor: colors.primary },
+              (isSubmitting || !title.trim() || !fileUri) && styles.saveButtonDisabled,
+            ]}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.saveButtonText}>Save</Text>
+            )}
+          </TouchableOpacity>
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Document Capture Section */}
-          <View style={styles.captureSection}>
+          {/* Upload Progress */}
+          {uploadProgress && (
+            <View style={[styles.progressBanner, { backgroundColor: colors.primary + "20" }]}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[styles.progressText, { color: colors.primary }]}>{uploadProgress}</Text>
+            </View>
+          )}
+
+          {/* Cloud Storage Notice */}
+          {isAuthenticated && (
+            <View style={[styles.cloudNotice, { backgroundColor: colors.success + "15", borderColor: colors.success + "30" }]}>
+              <IconSymbol name="checkmark.circle.fill" size={16} color={colors.success} />
+              <Text style={[styles.cloudNoticeText, { color: colors.foreground }]}>
+                Documents will be uploaded to cloud for sync across devices
+              </Text>
+            </View>
+          )}
+
+          {/* Document Capture/Upload */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Document</Text>
+            
             {fileUri ? (
-              renderFilePreview()
+              <View style={styles.previewContainer}>
+                {fileType === "image" ? (
+                  <Image
+                    source={{ uri: fileUri }}
+                    style={styles.previewImage}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View style={[styles.filePreview, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <IconSymbol
+                      name={fileType === "pdf" ? "doc.fill" : "doc.fill"}
+                      size={40}
+                      color={colors.primary}
+                    />
+                    <Text style={[styles.fileName, { color: colors.foreground }]} numberOfLines={2}>
+                      {fileName || "Document"}
+                    </Text>
+                    <Text style={[styles.fileTypeLabel, { color: colors.muted }]}>
+                      {fileType.toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  onPress={clearFile}
+                  style={[styles.clearButton, { backgroundColor: colors.error }]}
+                >
+                  <IconSymbol name="xmark" size={16} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
             ) : (
-              <View style={styles.captureButtons}>
+              <View style={styles.uploadOptions}>
                 <TouchableOpacity
                   onPress={handleTakePhoto}
-                  style={[styles.captureButton, { backgroundColor: colors.primary }]}
+                  style={[styles.uploadButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
                 >
-                  <IconSymbol name="camera.fill" size={32} color="#FFFFFF" />
-                  <Text style={styles.captureButtonText}>Capture Document</Text>
+                  <IconSymbol name="camera.fill" size={24} color={colors.primary} />
+                  <Text style={[styles.uploadButtonText, { color: colors.foreground }]}>Camera</Text>
                 </TouchableOpacity>
                 
-                <View style={styles.uploadRow}>
-                  <TouchableOpacity
-                    onPress={handlePickImage}
-                    style={[styles.halfButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                  >
-                    <IconSymbol name="photo.fill" size={22} color={colors.primary} />
-                    <Text style={[styles.halfButtonText, { color: colors.primary }]}>Gallery</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    onPress={handlePickDocument}
-                    style={[styles.halfButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                  >
-                    <IconSymbol name="doc.fill" size={22} color={colors.primary} />
-                    <Text style={[styles.halfButtonText, { color: colors.primary }]}>Files</Text>
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity
+                  onPress={handlePickImage}
+                  style={[styles.uploadButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                >
+                  <IconSymbol name="photo.fill" size={24} color={colors.primary} />
+                  <Text style={[styles.uploadButtonText, { color: colors.foreground }]}>Gallery</Text>
+                </TouchableOpacity>
                 
-                <Text style={[styles.supportedFormats, { color: colors.muted }]}>
-                  Supported: Images, PDF, Word documents
-                </Text>
+                <TouchableOpacity
+                  onPress={handlePickDocument}
+                  style={[styles.uploadButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                >
+                  <IconSymbol name="doc.fill" size={24} color={colors.primary} />
+                  <Text style={[styles.uploadButtonText, { color: colors.foreground }]}>Files</Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
 
-          {/* Form Fields */}
-          <View style={styles.form}>
-            {/* Title */}
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.foreground }]}>Document Title *</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, color: colors.foreground, borderColor: colors.border }]}
-                value={title}
-                onChangeText={setTitle}
-                placeholder="e.g., Annual Checkup Results"
-                placeholderTextColor={colors.muted}
-                returnKeyType="done"
-              />
-            </View>
+          {/* Title */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+              Title <Text style={{ color: colors.error }}>*</Text>
+            </Text>
+            <TextInput
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Enter document title"
+              placeholderTextColor={colors.muted}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  color: colors.foreground,
+                },
+              ]}
+            />
+          </View>
 
-            {/* Category */}
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.foreground }]}>Category</Text>
+          {/* Category */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Category</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
               <View style={styles.categoryContainer}>
                 {DOCUMENT_CATEGORIES.map((cat) => (
                   <TouchableOpacity
                     key={cat.value}
                     onPress={() => setCategory(cat.value)}
                     style={[
-                      styles.categoryOption,
+                      styles.categoryChip,
                       {
                         backgroundColor: category === cat.value ? colors.primary : colors.surface,
                         borderColor: category === cat.value ? colors.primary : colors.border,
@@ -312,7 +429,7 @@ export default function AddDocumentScreen() {
                   >
                     <Text
                       style={[
-                        styles.categoryText,
+                        styles.categoryChipText,
                         { color: category === cat.value ? "#FFFFFF" : colors.foreground },
                       ]}
                     >
@@ -321,46 +438,44 @@ export default function AddDocumentScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
-
-            {/* Date */}
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.foreground }]}>Document Date</Text>
-              <CustomDatePicker
-                value={date}
-                onChange={setDate}
-                maximumDate={new Date()}
-                label="Document Date"
-              />
-            </View>
-
-            {/* Notes */}
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.foreground }]}>Notes (Optional)</Text>
-              <TextInput
-                style={[styles.textArea, { backgroundColor: colors.surface, color: colors.foreground, borderColor: colors.border }]}
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Add any additional notes..."
-                placeholderTextColor={colors.muted}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-            </View>
+            </ScrollView>
           </View>
-        </ScrollView>
 
-        {/* Save Button */}
-        <View style={[styles.footer, { borderTopColor: colors.border }]}>
-          <TouchableOpacity
-            onPress={handleSave}
-            disabled={isSubmitting}
-            style={[styles.saveButton, { backgroundColor: colors.primary, opacity: isSubmitting ? 0.7 : 1 }]}
-          >
-            <Text style={styles.saveButtonText}>{isSubmitting ? "Saving..." : "Save Document"}</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Date */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Date</Text>
+            <CustomDatePicker
+              value={date}
+              onChange={setDate}
+              label="Document Date"
+            />
+          </View>
+
+          {/* Notes */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Notes</Text>
+            <TextInput
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Add any notes about this document..."
+              placeholderTextColor={colors.muted}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              style={[
+                styles.textArea,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  color: colors.foreground,
+                },
+              ]}
+            />
+          </View>
+
+          {/* Spacer for keyboard */}
+          <View style={{ height: 40 }} />
+        </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>
   );
@@ -387,114 +502,113 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
   },
+  saveButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    minWidth: 70,
+    alignItems: "center",
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
+  },
+  saveButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+    fontSize: 15,
+  },
   content: {
     flex: 1,
     paddingHorizontal: 20,
   },
-  captureSection: {
+  progressBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  cloudNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 8,
+  },
+  cloudNoticeText: {
+    fontSize: 13,
+    flex: 1,
+  },
+  section: {
     marginBottom: 24,
   },
-  captureButtons: {
-    gap: 12,
-  },
-  captureButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 32,
-    borderRadius: 16,
-    gap: 12,
-  },
-  captureButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
+  sectionTitle: {
+    fontSize: 15,
     fontWeight: "600",
+    marginBottom: 12,
   },
-  uploadRow: {
+  uploadOptions: {
     flexDirection: "row",
     gap: 12,
   },
-  halfButton: {
+  uploadButton: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
+    paddingVertical: 24,
     borderRadius: 12,
     borderWidth: 1,
     gap: 8,
   },
-  halfButtonText: {
-    fontSize: 15,
+  uploadButtonText: {
+    fontSize: 13,
     fontWeight: "500",
-  },
-  supportedFormats: {
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: 4,
   },
   previewContainer: {
     position: "relative",
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: "hidden",
   },
-  preview: {
+  previewImage: {
     width: "100%",
-    height: 250,
-    borderRadius: 16,
-  },
-  removeButton: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  documentPreview: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 12,
-  },
-  documentIconContainer: {
-    width: 64,
-    height: 64,
+    height: 200,
     borderRadius: 12,
+  },
+  filePreview: {
+    width: "100%",
+    height: 200,
+    borderRadius: 12,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-  },
-  documentInfo: {
-    flex: 1,
-  },
-  documentName: {
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  documentType: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  removeDocButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  form: {
-    gap: 20,
-    paddingBottom: 24,
-  },
-  field: {
     gap: 8,
   },
-  label: {
-    fontSize: 15,
+  fileName: {
+    fontSize: 14,
     fontWeight: "500",
+    textAlign: "center",
+    paddingHorizontal: 16,
+  },
+  fileTypeLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  clearButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
   input: {
     borderWidth: 1,
@@ -503,6 +617,24 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
   },
+  categoryScroll: {
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+  },
+  categoryContainer: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  categoryChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  categoryChipText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
   textArea: {
     borderWidth: 1,
     borderRadius: 12,
@@ -510,35 +642,5 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     minHeight: 100,
-  },
-  categoryContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  categoryOption: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  categoryText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  footer: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-  },
-  saveButton: {
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  saveButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
   },
 });
