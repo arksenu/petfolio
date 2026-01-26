@@ -1,13 +1,15 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   Modal,
   StyleSheet,
-  FlatList,
+  ScrollView,
   Dimensions,
   Platform,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/use-colors";
@@ -43,83 +45,113 @@ interface WheelPickerProps {
 
 function WheelPicker({ data, selectedIndex, onSelect, width }: WheelPickerProps) {
   const colors = useColors();
-  const flatListRef = useRef<FlatList>(null);
-  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [internalIndex, setInternalIndex] = useState(selectedIndex);
+  const isUserScrolling = useRef(false);
+  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Scroll to selected index on mount and when selectedIndex changes externally
   useEffect(() => {
-    if (!isScrolling && flatListRef.current) {
-      flatListRef.current.scrollToOffset({
-        offset: selectedIndex * ITEM_HEIGHT,
+    if (!isUserScrolling.current && scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({
+        y: selectedIndex * ITEM_HEIGHT,
         animated: false,
       });
+      setInternalIndex(selectedIndex);
     }
-  }, [selectedIndex, isScrolling]);
+  }, [selectedIndex]);
 
-  const handleScroll = (event: any) => {
-    const offsetY = event.nativeEvent.contentOffset.y;
-    const index = Math.round(offsetY / ITEM_HEIGHT);
-    if (index >= 0 && index < data.length && index !== selectedIndex) {
-      onSelect(index);
+  const snapToIndex = useCallback((index: number) => {
+    const clampedIndex = Math.max(0, Math.min(index, data.length - 1));
+    
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({
+        y: clampedIndex * ITEM_HEIGHT,
+        animated: true,
+      });
+    }
+    
+    if (clampedIndex !== internalIndex) {
+      setInternalIndex(clampedIndex);
+      onSelect(clampedIndex);
       if (Platform.OS !== "web") {
         Haptics.selectionAsync();
       }
     }
-  };
+  }, [data.length, internalIndex, onSelect]);
 
-  const renderItem = ({ item, index }: { item: string | number; index: number }) => {
-    const isSelected = index === selectedIndex;
-    return (
-      <View style={[styles.wheelItem, { height: ITEM_HEIGHT }]}>
-        <Text
-          style={[
-            styles.wheelItemText,
-            {
-              color: isSelected ? colors.foreground : colors.muted,
-              fontWeight: isSelected ? "600" : "400",
-              fontSize: isSelected ? 20 : 16,
-              opacity: isSelected ? 1 : 0.5,
-            },
-          ]}
-        >
-          {item}
-        </Text>
-      </View>
-    );
-  };
+  const handleScrollEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    const index = Math.round(offsetY / ITEM_HEIGHT);
+    snapToIndex(index);
+    isUserScrolling.current = false;
+  }, [snapToIndex]);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    // Clear any existing timeout
+    if (scrollTimeout.current) {
+      clearTimeout(scrollTimeout.current);
+    }
+    
+    // Set a timeout to snap after scrolling stops (for web)
+    if (Platform.OS === "web") {
+      scrollTimeout.current = setTimeout(() => {
+        const offsetY = event.nativeEvent.contentOffset.y;
+        const index = Math.round(offsetY / ITEM_HEIGHT);
+        snapToIndex(index);
+        isUserScrolling.current = false;
+      }, 150);
+    }
+  }, [snapToIndex]);
+
+  const handleScrollBegin = useCallback(() => {
+    isUserScrolling.current = true;
+  }, []);
 
   return (
     <View style={[styles.wheelContainer, { width, height: PICKER_HEIGHT }]}>
-      <FlatList
-        ref={flatListRef}
-        data={data}
-        renderItem={renderItem}
-        keyExtractor={(item, index) => `${item}-${index}`}
+      <ScrollView
+        ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
         snapToInterval={ITEM_HEIGHT}
         decelerationRate="fast"
-        onScrollBeginDrag={() => setIsScrolling(true)}
-        onMomentumScrollEnd={(e) => {
-          setIsScrolling(false);
-          handleScroll(e);
-        }}
-        onScrollEndDrag={(e) => {
-          // For web where momentum scroll doesn't fire
-          if (Platform.OS === "web") {
-            setTimeout(() => {
-              setIsScrolling(false);
-              handleScroll(e);
-            }, 100);
-          }
-        }}
+        onScrollBeginDrag={handleScrollBegin}
+        onMomentumScrollEnd={handleScrollEnd}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         contentContainerStyle={{
           paddingVertical: ITEM_HEIGHT * 2,
         }}
-        getItemLayout={(_, index) => ({
-          length: ITEM_HEIGHT,
-          offset: ITEM_HEIGHT * index,
-          index,
+      >
+        {data.map((item, index) => {
+          const isSelected = index === internalIndex;
+          const distance = Math.abs(index - internalIndex);
+          const opacity = distance === 0 ? 1 : distance === 1 ? 0.6 : 0.3;
+          
+          return (
+            <TouchableOpacity
+              key={`${item}-${index}`}
+              onPress={() => snapToIndex(index)}
+              style={[styles.wheelItem, { height: ITEM_HEIGHT }]}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.wheelItemText,
+                  {
+                    color: colors.foreground,
+                    fontWeight: isSelected ? "600" : "400",
+                    fontSize: isSelected ? 20 : 16,
+                    opacity: opacity,
+                  },
+                ]}
+              >
+                {item}
+              </Text>
+            </TouchableOpacity>
+          );
         })}
-      />
+      </ScrollView>
       {/* Selection indicator */}
       <View
         style={[
@@ -159,8 +191,10 @@ export function CustomDatePicker({
   const [tempDay, setTempDay] = useState(value.getDate());
   const [tempYear, setTempYear] = useState(value.getFullYear());
 
+  // Default year range: 1900 to current year + 10 (for future dates like vaccinations)
+  const currentYear = new Date().getFullYear();
   const minYear = minimumDate?.getFullYear() || 1900;
-  const maxYear = maximumDate?.getFullYear() || new Date().getFullYear();
+  const maxYear = maximumDate?.getFullYear() || currentYear + 10;
   const years = generateYears(minYear, maxYear);
   
   const daysInMonth = getDaysInMonth(tempMonth, tempYear);
@@ -187,15 +221,7 @@ export function CustomDatePicker({
     const validDay = Math.min(tempDay, maxDay);
     
     const newDate = new Date(tempYear, tempMonth, validDay);
-    
-    // Clamp to min/max dates
-    if (minimumDate && newDate < minimumDate) {
-      onChange(minimumDate);
-    } else if (maximumDate && newDate > maximumDate) {
-      onChange(maximumDate);
-    } else {
-      onChange(newDate);
-    }
+    onChange(newDate);
     
     setShowPicker(false);
     if (Platform.OS !== "web") {
@@ -213,7 +239,7 @@ export function CustomDatePicker({
     if (tempDay > maxDay) {
       setTempDay(maxDay);
     }
-  }, [tempMonth, tempYear]);
+  }, [tempMonth, tempYear, tempDay]);
 
   const screenWidth = Dimensions.get("window").width;
   const monthWidth = screenWidth * 0.4;
@@ -404,7 +430,6 @@ export function CustomTimePicker({
                 onSelect={(index) => setTempHour(index + 1)}
                 width={hourWidth}
               />
-              <Text style={[styles.timeSeparator, { color: colors.foreground }]}>:</Text>
               <WheelPicker
                 data={minutes}
                 selectedIndex={tempMinute}
@@ -427,23 +452,22 @@ export function CustomTimePicker({
 
 const styles = StyleSheet.create({
   input: {
-    borderWidth: 1,
+    padding: 16,
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderWidth: 1,
   },
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
   },
   modalBackground: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
   modalContent: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingBottom: 34,
+    paddingBottom: Platform.OS === "ios" ? 34 : 20,
   },
   modalHeader: {
     flexDirection: "row",
@@ -453,13 +477,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
   },
+  modalButton: {
+    padding: 8,
+    minWidth: 70,
+  },
   modalTitle: {
     fontSize: 17,
     fontWeight: "600",
-  },
-  modalButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
   },
   cancelText: {
     fontSize: 17,
@@ -467,10 +491,10 @@ const styles = StyleSheet.create({
   confirmText: {
     fontSize: 17,
     fontWeight: "600",
+    textAlign: "right",
   },
   pickerRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "center",
     paddingVertical: 10,
   },
@@ -490,10 +514,5 @@ const styles = StyleSheet.create({
     right: 0,
     borderTopWidth: 1,
     borderBottomWidth: 1,
-  },
-  timeSeparator: {
-    fontSize: 24,
-    fontWeight: "600",
-    marginHorizontal: 4,
   },
 });

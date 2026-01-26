@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Text,
   View,
@@ -20,7 +20,6 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
-import { WebView } from "react-native-webview";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -40,8 +39,8 @@ export default function ViewDocumentScreen() {
   const pet = document ? getPet(document.petId) : null;
 
   const [showControls, setShowControls] = useState(true);
-  const [pdfLoading, setPdfLoading] = useState(true);
-  const [pdfError, setPdfError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
 
   // Pinch-to-zoom and pan values
   const scale = useSharedValue(1);
@@ -134,6 +133,9 @@ export default function ViewDocumentScreen() {
   const fileType = document.fileType || "image";
   const isPdf = fileType === "pdf";
   const isDocument = fileType === "document";
+  
+  // Check if it's a viewable image type
+  const isImage = !isPdf && !isDocument;
 
   const handleClose = () => {
     router.back();
@@ -154,105 +156,23 @@ export default function ViewDocumentScreen() {
     }
   };
 
-  // Get PDF viewer URL - use Google Docs viewer for remote PDFs
-  const getPdfViewerUrl = () => {
-    const fileUri = document.fileUri;
-    
-    // For local files, we need to use a different approach
-    // Check if it's a local file (starts with file:// or content://)
-    if (fileUri.startsWith("file://") || fileUri.startsWith("content://")) {
-      // For local files, return the URI directly - WebView can handle some local files
-      return fileUri;
-    }
-    
-    // For remote URLs, use Google Docs viewer
-    const encodedUrl = encodeURIComponent(fileUri);
-    return `https://docs.google.com/gview?embedded=true&url=${encodedUrl}`;
-  };
-
-  // Render PDF viewer with WebView
-  const renderPdfViewer = () => {
-    const viewerUrl = getPdfViewerUrl();
-    const isLocalFile = document.fileUri.startsWith("file://") || document.fileUri.startsWith("content://");
+  // Render PDF/Document placeholder with share option
+  const renderPdfOrDocumentView = () => {
+    const iconName = isPdf ? "doc.fill" : "doc.text.fill";
+    const iconColor = isPdf ? "#E74C3C" : colors.primary;
+    const fileTypeLabel = isPdf ? "PDF Document" : "Document File";
     
     return (
-      <View style={styles.pdfContainer}>
-        {/* Loading indicator */}
-        {pdfLoading && (
-          <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={[styles.loadingText, { color: colors.muted }]}>
-              Loading document...
-            </Text>
-          </View>
-        )}
-        
-        {/* Error state */}
-        {pdfError && (
-          <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
-            <View style={[styles.errorIconContainer, { backgroundColor: colors.error + "20" }]}>
-              <IconSymbol name="exclamationmark.circle.fill" size={48} color={colors.error} />
-            </View>
-            <Text style={[styles.errorTitle, { color: colors.foreground }]}>
-              Unable to Load Document
-            </Text>
-            <Text style={[styles.errorMessage, { color: colors.muted }]}>
-              {isLocalFile 
-                ? "Local PDF files cannot be previewed in-app. Use the share button to open in another app."
-                : "The document couldn't be loaded. Please try again or share to another app."}
-            </Text>
-            <TouchableOpacity
-              onPress={handleShare}
-              style={[styles.errorButton, { backgroundColor: colors.primary }]}
-            >
-              <IconSymbol name="square.and.arrow.up" size={20} color="#FFFFFF" />
-              <Text style={styles.errorButtonText}>Share Document</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {/* WebView for PDF */}
-        {!pdfError && (
-          <WebView
-            source={{ uri: viewerUrl }}
-            style={[styles.webView, pdfLoading && styles.hidden]}
-            onLoadStart={() => {
-              setPdfLoading(true);
-              setPdfError(false);
-            }}
-            onLoadEnd={() => setPdfLoading(false)}
-            onError={() => {
-              setPdfLoading(false);
-              setPdfError(true);
-            }}
-            onHttpError={() => {
-              setPdfLoading(false);
-              setPdfError(true);
-            }}
-            scalesPageToFit
-            javaScriptEnabled
-            domStorageEnabled
-            startInLoadingState={false}
-            allowsInlineMediaPlayback
-          />
-        )}
-      </View>
-    );
-  };
-
-  // Render document placeholder (for non-PDF documents like Word)
-  const renderDocumentPlaceholder = () => {
-    return (
-      <View style={styles.pdfContainer}>
-        <View style={[styles.placeholderContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.placeholderIconContainer, { backgroundColor: colors.primary + "20" }]}>
-            <IconSymbol name="doc.text.fill" size={64} color={colors.primary} />
+      <View style={styles.placeholderContainer}>
+        <View style={[styles.placeholderContent, { backgroundColor: colors.background }]}>
+          <View style={[styles.placeholderIconContainer, { backgroundColor: iconColor + "20" }]}>
+            <IconSymbol name={iconName} size={64} color={iconColor} />
           </View>
           <Text style={[styles.placeholderFileName, { color: colors.foreground }]}>
             {document.fileName || document.title}
           </Text>
           <Text style={[styles.placeholderFileType, { color: colors.muted }]}>
-            Document File
+            {fileTypeLabel}
           </Text>
           
           <View style={styles.placeholderActions}>
@@ -261,13 +181,31 @@ export default function ViewDocumentScreen() {
               style={[styles.placeholderButton, { backgroundColor: colors.primary }]}
             >
               <IconSymbol name="square.and.arrow.up" size={20} color="#FFFFFF" />
-              <Text style={styles.placeholderButtonText}>Share to Open</Text>
+              <Text style={styles.placeholderButtonText}>Open with...</Text>
             </TouchableOpacity>
           </View>
           
           <Text style={[styles.placeholderHint, { color: colors.muted }]}>
-            This document type requires an external app to view. Tap "Share to Open" to choose an app.
+            Tap "Open with..." to view this document in your preferred app (Files, PDF viewer, etc.)
           </Text>
+          
+          {/* Document info */}
+          <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: colors.muted }]}>Category</Text>
+              <Text style={[styles.infoValue, { color: colors.foreground }]}>{categoryLabel}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: colors.muted }]}>Date</Text>
+              <Text style={[styles.infoValue, { color: colors.foreground }]}>{formatDate(document.date)}</Text>
+            </View>
+            {document.notes && (
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: colors.muted }]}>Notes</Text>
+                <Text style={[styles.infoValue, { color: colors.foreground }]} numberOfLines={3}>{document.notes}</Text>
+              </View>
+            )}
+          </View>
         </View>
       </View>
     );
@@ -278,11 +216,52 @@ export default function ViewDocumentScreen() {
     return (
       <GestureDetector gesture={composedGesture}>
         <View style={styles.imageContainer}>
+          {/* Loading indicator */}
+          {imageLoading && (
+            <View style={[styles.loadingOverlay, { backgroundColor: "#000000" }]}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.loadingText, { color: "#FFFFFF" }]}>
+                Loading image...
+              </Text>
+            </View>
+          )}
+          
+          {/* Error state */}
+          {imageError && (
+            <View style={[styles.errorOverlay, { backgroundColor: "#000000" }]}>
+              <View style={[styles.errorIconContainer, { backgroundColor: colors.error + "20" }]}>
+                <IconSymbol name="exclamationmark.circle.fill" size={48} color={colors.error} />
+              </View>
+              <Text style={[styles.errorTitle, { color: "#FFFFFF" }]}>
+                Unable to Load Image
+              </Text>
+              <Text style={[styles.errorMessage, { color: "rgba(255,255,255,0.7)" }]}>
+                The image couldn't be loaded. Try sharing it to view in another app.
+              </Text>
+              <TouchableOpacity
+                onPress={handleShare}
+                style={[styles.errorButton, { backgroundColor: colors.primary }]}
+              >
+                <IconSymbol name="square.and.arrow.up" size={20} color="#FFFFFF" />
+                <Text style={styles.errorButtonText}>Share Image</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
           <Animated.View style={[styles.imageWrapper, animatedStyle]}>
             <Image
               source={{ uri: document.fileUri }}
               style={styles.image}
               contentFit="contain"
+              onLoadStart={() => {
+                setImageLoading(true);
+                setImageError(false);
+              }}
+              onLoad={() => setImageLoading(false)}
+              onError={() => {
+                setImageLoading(false);
+                setImageError(true);
+              }}
             />
           </Animated.View>
         </View>
@@ -291,10 +270,8 @@ export default function ViewDocumentScreen() {
   };
 
   const renderContent = () => {
-    if (isPdf) {
-      return renderPdfViewer();
-    } else if (isDocument) {
-      return renderDocumentPlaceholder();
+    if (isPdf || isDocument) {
+      return renderPdfOrDocumentView();
     } else {
       return renderImageViewer();
     }
@@ -302,29 +279,29 @@ export default function ViewDocumentScreen() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <View style={[styles.container, { backgroundColor: isPdf || isDocument ? colors.background : "#000000" }]}>
+      <View style={[styles.container, { backgroundColor: isImage ? "#000000" : colors.background }]}>
         {/* Header */}
         {showControls && (
           <View style={[
             styles.header, 
-            { backgroundColor: isPdf || isDocument ? colors.surface : "rgba(0,0,0,0.7)" }
+            { backgroundColor: isImage ? "rgba(0,0,0,0.7)" : colors.surface }
           ]}>
             <TouchableOpacity onPress={handleClose} style={styles.headerButton}>
-              <IconSymbol name="xmark" size={24} color={isPdf || isDocument ? colors.foreground : "#FFFFFF"} />
+              <IconSymbol name="xmark" size={24} color={isImage ? "#FFFFFF" : colors.foreground} />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
               <Text 
-                style={[styles.headerTitle, { color: isPdf || isDocument ? colors.foreground : "#FFFFFF" }]} 
+                style={[styles.headerTitle, { color: isImage ? "#FFFFFF" : colors.foreground }]} 
                 numberOfLines={1}
               >
                 {document.title}
               </Text>
-              <Text style={[styles.headerSubtitle, { color: isPdf || isDocument ? colors.muted : "rgba(255,255,255,0.7)" }]}>
+              <Text style={[styles.headerSubtitle, { color: isImage ? "rgba(255,255,255,0.7)" : colors.muted }]}>
                 {pet?.name} • {formatDate(document.date)}
               </Text>
             </View>
             <TouchableOpacity onPress={handleShare} style={styles.headerButton}>
-              <IconSymbol name="square.and.arrow.up" size={22} color={isPdf || isDocument ? colors.foreground : "#FFFFFF"} />
+              <IconSymbol name="square.and.arrow.up" size={22} color={isImage ? "#FFFFFF" : colors.foreground} />
             </TouchableOpacity>
           </View>
         )}
@@ -333,7 +310,7 @@ export default function ViewDocumentScreen() {
         {renderContent()}
 
         {/* Footer Info - only for images */}
-        {showControls && !isPdf && !isDocument && (
+        {showControls && isImage && !imageError && (
           <View style={[styles.footer, { backgroundColor: "rgba(0,0,0,0.7)" }]}>
             <View style={[styles.categoryBadge, { backgroundColor: colors.primary }]}>
               <Text style={styles.categoryText}>{categoryLabel}</Text>
@@ -346,14 +323,6 @@ export default function ViewDocumentScreen() {
             <Text style={styles.hintText}>
               Pinch to zoom • Double-tap to toggle zoom • Tap to show/hide controls
             </Text>
-          </View>
-        )}
-
-        {/* Footer for PDF/Document */}
-        {(isPdf || isDocument) && document.notes && (
-          <View style={[styles.pdfFooter, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-            <Text style={[styles.notesLabel, { color: colors.muted }]}>Notes</Text>
-            <Text style={[styles.pdfNotesText, { color: colors.foreground }]}>{document.notes}</Text>
           </View>
         )}
       </View>
@@ -408,50 +377,7 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  footer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 20,
-    paddingBottom: Platform.OS === "ios" ? 40 : 20,
-  },
-  categoryBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginBottom: 8,
-  },
-  categoryText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  notesText: {
-    color: "rgba(255,255,255,0.9)",
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  hintText: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: 8,
-  },
-  pdfContainer: {
-    flex: 1,
-    marginTop: Platform.OS === "ios" ? 110 : 90,
-  },
-  webView: {
-    flex: 1,
-    backgroundColor: "transparent",
-  },
-  hidden: {
-    opacity: 0,
-  },
-  loadingContainer: {
+  loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
@@ -461,10 +387,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
   },
-  errorContainer: {
-    flex: 1,
+  errorOverlay: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 5,
     padding: 32,
   },
   errorIconContainer: {
@@ -500,7 +427,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    paddingBottom: Platform.OS === "ios" ? 40 : 20,
+  },
+  categoryBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginBottom: 8,
+  },
+  categoryText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  notesText: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  hintText: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 8,
+  },
   placeholderContainer: {
+    flex: 1,
+    marginTop: Platform.OS === "ios" ? 110 : 90,
+  },
+  placeholderContent: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
@@ -545,19 +508,26 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 18,
     maxWidth: 280,
+    marginBottom: 24,
   },
-  pdfFooter: {
+  infoCard: {
+    width: "100%",
+    maxWidth: 320,
+    borderRadius: 12,
+    borderWidth: 1,
     padding: 16,
-    borderTopWidth: 1,
   },
-  notesLabel: {
+  infoRow: {
+    marginBottom: 12,
+  },
+  infoLabel: {
     fontSize: 12,
     fontWeight: "600",
-    marginBottom: 4,
     textTransform: "uppercase",
+    marginBottom: 4,
   },
-  pdfNotesText: {
-    fontSize: 14,
+  infoValue: {
+    fontSize: 15,
     lineHeight: 20,
   },
 });

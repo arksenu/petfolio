@@ -89,3 +89,8 @@
 ## Bug Fixes (v1.3)
 - [x] Create fully custom date picker with scrollable wheels (native picker not working in Expo Go)
 - [x] Build in-app PDF viewer using WebView instead of external app
+
+## Bug Fixes (v1.4)
+- [x] Fix date picker - greyed out items due to minimumDate constraint on date of birth
+- [x] Fix date picker - wheels don't snap to values properly
+- [x] Fix document viewer - loading forever for local files (images/PDFs stored on device)
