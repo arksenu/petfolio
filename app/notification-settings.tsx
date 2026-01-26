@@ -31,6 +31,8 @@ export default function NotificationSettingsScreen() {
     reminderNotifications: true,
     vaccinationWarnings: true,
     vaccinationWarningDays: 7,
+    medicationReminders: true,
+    refillReminders: true,
   });
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [scheduledCount, setScheduledCount] = useState(0);
@@ -187,7 +189,7 @@ export default function NotificationSettingsScreen() {
             />
           </View>
 
-          <View style={styles.settingRow}>
+          <View style={[styles.settingRow, { borderBottomColor: colors.border }]}>
             <View style={styles.settingInfo}>
               <Text style={[styles.settingTitle, { color: colors.foreground }]}>
                 Vaccination Alerts
@@ -202,6 +204,42 @@ export default function NotificationSettingsScreen() {
               disabled={!settings.enabled}
               trackColor={{ false: colors.border, true: colors.primary + "80" }}
               thumbColor={settings.vaccinationWarnings ? colors.primary : colors.muted}
+            />
+          </View>
+
+          <View style={[styles.settingRow, { borderBottomColor: colors.border }]}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingTitle, { color: colors.foreground }]}>
+                Medication Reminders
+              </Text>
+              <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
+                Daily reminders for scheduled medications
+              </Text>
+            </View>
+            <Switch
+              value={settings.medicationReminders}
+              onValueChange={(value) => handleToggle("medicationReminders", value)}
+              disabled={!settings.enabled}
+              trackColor={{ false: colors.border, true: colors.primary + "80" }}
+              thumbColor={settings.medicationReminders ? colors.primary : colors.muted}
+            />
+          </View>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingTitle, { color: colors.foreground }]}>
+                Refill Reminders
+              </Text>
+              <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
+                Alerts when medications are running low
+              </Text>
+            </View>
+            <Switch
+              value={settings.refillReminders}
+              onValueChange={(value) => handleToggle("refillReminders", value)}
+              disabled={!settings.enabled}
+              trackColor={{ false: colors.border, true: colors.primary + "80" }}
+              thumbColor={settings.refillReminders ? colors.primary : colors.muted}
             />
           </View>
         </View>

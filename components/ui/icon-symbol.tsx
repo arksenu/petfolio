@@ -50,6 +50,8 @@ const MAPPING = {
   "lock.fill": "lock",
   "eye.fill": "visibility",
   "eye.slash.fill": "visibility-off",
+  "pills.fill": "medication",
+  "folder.fill": "folder",
 } as IconMapping;
 
 /**

@@ -6,6 +6,8 @@ import {
   Vaccination,
   Reminder,
   WeightEntry,
+  Medication,
+  DoseLog,
   generateId,
 } from '@/shared/pet-types';
 import {
@@ -24,6 +26,7 @@ const STORAGE_KEYS = {
   VACCINATIONS: 'petfolio_vaccinations',
   REMINDERS: 'petfolio_reminders',
   WEIGHT_HISTORY: 'petfolio_weight_history',
+  MEDICATIONS: 'petfolio_medications',
   LAST_SYNC: 'petfolio_last_sync',
 };
 
@@ -34,6 +37,7 @@ interface PetState {
   vaccinations: Vaccination[];
   reminders: Reminder[];
   weightHistory: WeightEntry[];
+  medications: Medication[];
   isLoading: boolean;
   isInitialized: boolean;
   isSyncing: boolean;
@@ -61,6 +65,10 @@ type PetAction =
   | { type: 'TOGGLE_REMINDER'; payload: string }
   | { type: 'ADD_WEIGHT_ENTRY'; payload: WeightEntry }
   | { type: 'DELETE_WEIGHT_ENTRY'; payload: string }
+  | { type: 'ADD_MEDICATION'; payload: Medication }
+  | { type: 'UPDATE_MEDICATION'; payload: Medication }
+  | { type: 'DELETE_MEDICATION'; payload: string }
+  | { type: 'LOG_DOSE'; payload: { medicationId: string; doseLog: DoseLog } }
   | { type: 'MERGE_CLOUD_DATA'; payload: Partial<PetState> };
 
 // Initial state
@@ -70,6 +78,7 @@ const initialState: PetState = {
   vaccinations: [],
   reminders: [],
   weightHistory: [],
+  medications: [],
   isLoading: true,
   isInitialized: false,
   isSyncing: false,
@@ -144,6 +153,24 @@ function petReducer(state: PetState, action: PetAction): PetState {
       return { ...state, weightHistory: [action.payload, ...state.weightHistory] };
     case 'DELETE_WEIGHT_ENTRY':
       return { ...state, weightHistory: state.weightHistory.filter((w) => w.id !== action.payload) };
+    case 'ADD_MEDICATION':
+      return { ...state, medications: [...state.medications, action.payload] };
+    case 'UPDATE_MEDICATION':
+      return {
+        ...state,
+        medications: state.medications.map((m) => (m.id === action.payload.id ? action.payload : m)),
+      };
+    case 'DELETE_MEDICATION':
+      return { ...state, medications: state.medications.filter((m) => m.id !== action.payload) };
+    case 'LOG_DOSE':
+      return {
+        ...state,
+        medications: state.medications.map((m) =>
+          m.id === action.payload.medicationId
+            ? { ...m, doseLog: [...m.doseLog, action.payload.doseLog] }
+            : m
+        ),
+      };
     default:
       return state;
   }
@@ -179,6 +206,12 @@ interface PetContextType {
   addWeightEntry: (entry: Omit<WeightEntry, 'id' | 'createdAt'>) => Promise<WeightEntry>;
   deleteWeightEntry: (id: string) => Promise<void>;
   getWeightHistoryForPet: (petId: string) => WeightEntry[];
+  // Medication actions
+  addMedication: (med: Omit<Medication, 'id' | 'createdAt' | 'updatedAt' | 'doseLog'>) => Promise<Medication>;
+  updateMedication: (med: Medication) => Promise<void>;
+  deleteMedication: (id: string) => Promise<void>;
+  getMedicationsForPet: (petId: string) => Medication[];
+  logDose: (medicationId: string, skipped?: boolean, notes?: string) => Promise<void>;
   // Sync actions
   syncWithCloud: () => Promise<void>;
 }
@@ -212,16 +245,17 @@ export function PetProvider({ children }: { children: ReactNode }) {
     if (state.isInitialized) {
       saveData();
     }
-  }, [state.pets, state.documents, state.vaccinations, state.reminders, state.weightHistory, state.isInitialized]);
+  }, [state.pets, state.documents, state.vaccinations, state.reminders, state.weightHistory, state.medications, state.isInitialized]);
 
   async function loadData() {
     try {
-      const [petsJson, docsJson, vaxJson, remindersJson, weightJson, lastSync] = await Promise.all([
+      const [petsJson, docsJson, vaxJson, remindersJson, weightJson, medsJson, lastSync] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.PETS),
         AsyncStorage.getItem(STORAGE_KEYS.DOCUMENTS),
         AsyncStorage.getItem(STORAGE_KEYS.VACCINATIONS),
         AsyncStorage.getItem(STORAGE_KEYS.REMINDERS),
         AsyncStorage.getItem(STORAGE_KEYS.WEIGHT_HISTORY),
+        AsyncStorage.getItem(STORAGE_KEYS.MEDICATIONS),
         AsyncStorage.getItem(STORAGE_KEYS.LAST_SYNC),
       ]);
 
@@ -233,6 +267,7 @@ export function PetProvider({ children }: { children: ReactNode }) {
           vaccinations: vaxJson ? JSON.parse(vaxJson) : [],
           reminders: remindersJson ? JSON.parse(remindersJson) : [],
           weightHistory: weightJson ? JSON.parse(weightJson) : [],
+          medications: medsJson ? JSON.parse(medsJson) : [],
           lastSyncTime: lastSync,
         },
       });
@@ -250,6 +285,7 @@ export function PetProvider({ children }: { children: ReactNode }) {
         AsyncStorage.setItem(STORAGE_KEYS.VACCINATIONS, JSON.stringify(state.vaccinations)),
         AsyncStorage.setItem(STORAGE_KEYS.REMINDERS, JSON.stringify(state.reminders)),
         AsyncStorage.setItem(STORAGE_KEYS.WEIGHT_HISTORY, JSON.stringify(state.weightHistory)),
+        AsyncStorage.setItem(STORAGE_KEYS.MEDICATIONS, JSON.stringify(state.medications)),
       ]);
     } catch (error) {
       console.error('Failed to save data:', error);
@@ -756,6 +792,55 @@ export function PetProvider({ children }: { children: ReactNode }) {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
 
+  // Medication actions
+  async function addMedication(medData: Omit<Medication, 'id' | 'createdAt' | 'updatedAt' | 'doseLog'>): Promise<Medication> {
+    const now = new Date().toISOString();
+    const medication: Medication = {
+      ...medData,
+      id: generateId(),
+      doseLog: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    dispatch({ type: 'ADD_MEDICATION', payload: medication });
+    return medication;
+  }
+
+  async function updateMedication(medication: Medication): Promise<void> {
+    const updatedMed = { ...medication, updatedAt: new Date().toISOString() };
+    dispatch({ type: 'UPDATE_MEDICATION', payload: updatedMed });
+  }
+
+  async function deleteMedication(id: string): Promise<void> {
+    dispatch({ type: 'DELETE_MEDICATION', payload: id });
+  }
+
+  function getMedicationsForPet(petId: string): Medication[] {
+    return state.medications.filter((m) => m.petId === petId);
+  }
+
+  async function logDose(medicationId: string, skipped: boolean = false, notes?: string): Promise<void> {
+    const doseLog: DoseLog = {
+      id: generateId(),
+      medicationId,
+      takenAt: new Date().toISOString(),
+      skipped,
+      notes,
+    };
+    dispatch({ type: 'LOG_DOSE', payload: { medicationId, doseLog } });
+    
+    // Update pills remaining if tracking
+    const medication = state.medications.find((m) => m.id === medicationId);
+    if (medication && medication.pillsRemaining !== undefined && !skipped) {
+      const updatedMed = {
+        ...medication,
+        pillsRemaining: Math.max(0, medication.pillsRemaining - 1),
+        updatedAt: new Date().toISOString(),
+      };
+      dispatch({ type: 'UPDATE_MEDICATION', payload: updatedMed });
+    }
+  }
+
   const value: PetContextType = {
     state,
     addPet,
@@ -780,6 +865,11 @@ export function PetProvider({ children }: { children: ReactNode }) {
     addWeightEntry,
     deleteWeightEntry,
     getWeightHistoryForPet,
+    addMedication,
+    updateMedication,
+    deleteMedication,
+    getMedicationsForPet,
+    logDose,
     syncWithCloud,
   };
 

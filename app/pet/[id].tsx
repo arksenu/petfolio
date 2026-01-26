@@ -26,9 +26,11 @@ import {
   PetDocument,
   Vaccination,
   Reminder,
+  Medication,
+  MEDICATION_FREQUENCIES,
 } from "@/shared/pet-types";
 
-type TabType = "records" | "vaccinations" | "reminders";
+type TabType = "records" | "vaccinations" | "reminders" | "medications";
 
 export default function PetProfileScreen() {
   const router = useRouter();
@@ -39,11 +41,14 @@ export default function PetProfileScreen() {
     getDocumentsForPet,
     getVaccinationsForPet,
     getRemindersForPet,
+    getMedicationsForPet,
     deletePet,
     deleteDocument,
     deleteVaccination,
     deleteReminder,
     toggleReminder,
+    deleteMedication,
+    logDose,
   } = usePetStore();
 
   const [activeTab, setActiveTab] = useState<TabType>("records");
@@ -53,6 +58,7 @@ export default function PetProfileScreen() {
   const documents = getDocumentsForPet(id || "");
   const vaccinations = getVaccinationsForPet(id || "");
   const reminders = getRemindersForPet(id || "");
+  const medications = getMedicationsForPet(id || "");
 
   const filteredDocuments = useMemo(() => {
     if (selectedCategory === "all") return documents;
@@ -122,6 +128,78 @@ export default function PetProfileScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     router.push(`/add-reminder/${id}` as any);
+  };
+
+  const handleAddMedication = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    router.push(`/add-medication/${id}` as any);
+  };
+
+  const handleDeleteMedication = (medId: string) => {
+    Alert.alert("Delete Medication", "Are you sure you want to delete this medication?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => deleteMedication(medId) },
+    ]);
+  };
+
+  const handleLogDose = (medId: string, medName: string) => {
+    Alert.alert(
+      "Log Dose",
+      `Did you give ${pet?.name} their ${medName}?`,
+      [
+        { text: "Skip", style: "cancel", onPress: () => logDose(medId, true) },
+        { text: "Yes, Given", onPress: () => logDose(medId, false) },
+      ]
+    );
+  };
+
+  const getNextDoseTime = (med: Medication): string => {
+    const lastDose = med.doseLog?.[med.doseLog.length - 1];
+    if (!lastDose) return "No doses logged";
+    
+    const lastDoseDate = new Date(lastDose.takenAt);
+    let nextDose = new Date(lastDoseDate);
+    
+    switch (med.frequency) {
+      case "once_daily":
+        nextDose.setDate(nextDose.getDate() + 1);
+        break;
+      case "twice_daily":
+        nextDose.setHours(nextDose.getHours() + 12);
+        break;
+      case "three_times_daily":
+        nextDose.setHours(nextDose.getHours() + 8);
+        break;
+      case "every_other_day":
+        nextDose.setDate(nextDose.getDate() + 2);
+        break;
+      case "weekly":
+        nextDose.setDate(nextDose.getDate() + 7);
+        break;
+      case "monthly":
+        nextDose.setMonth(nextDose.getMonth() + 1);
+        break;
+      default:
+        return "As needed";
+    }
+    
+    const now = new Date();
+    if (nextDose < now) return "Due now";
+    
+    const diffMs = nextDose.getTime() - now.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (diffHours > 24) {
+      const diffDays = Math.floor(diffHours / 24);
+      return `Next in ${diffDays}d`;
+    } else if (diffHours > 0) {
+      return `Next in ${diffHours}h ${diffMins}m`;
+    } else {
+      return `Next in ${diffMins}m`;
+    }
   };
 
   const handleDeleteDocument = (docId: string) => {
@@ -282,10 +360,70 @@ export default function PetProfileScreen() {
     );
   };
 
+  const renderMedicationCard = ({ item }: { item: Medication }) => {
+    const freqLabel = MEDICATION_FREQUENCIES.find((f) => f.value === item.frequency)?.label || item.frequency;
+    const nextDose = getNextDoseTime(item);
+    const isDueNow = nextDose === "Due now";
+    const needsRefill = item.pillsRemaining !== undefined && item.refillReminderAt !== undefined && item.pillsRemaining <= item.refillReminderAt;
+    
+    return (
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.cardHeader}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={[styles.cardTitle, { color: colors.foreground }]}>{item.name}</Text>
+              {needsRefill && (
+                <View style={[styles.categoryBadge, { backgroundColor: colors.warning + "20" }]}>
+                  <Text style={{ fontSize: 10, color: colors.warning, fontWeight: "600" }}>REFILL</Text>
+                </View>
+              )}
+            </View>
+            <Text style={[styles.cardDate, { color: colors.muted }]}>
+              {item.dosage} · {freqLabel}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => handleDeleteMedication(item.id)}>
+            <IconSymbol name="trash.fill" size={18} color={colors.error} />
+          </TouchableOpacity>
+        </View>
+        
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
+          <View>
+            <Text style={[styles.cardDate, { color: isDueNow ? colors.warning : colors.muted }]}>
+              {nextDose}
+            </Text>
+            {item.pillsRemaining !== undefined && (
+              <Text style={[styles.cardDate, { color: needsRefill ? colors.warning : colors.muted, marginTop: 2 }]}>
+                {item.pillsRemaining} pills remaining
+              </Text>
+            )}
+          </View>
+          <TouchableOpacity
+            onPress={() => handleLogDose(item.id, item.name)}
+            style={[
+              styles.logDoseButton,
+              { backgroundColor: isDueNow ? colors.primary : colors.primary + "20" },
+            ]}
+          >
+            <Text style={{ color: isDueNow ? "#FFFFFF" : colors.primary, fontWeight: "600", fontSize: 14 }}>
+              Log Dose
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        {item.instructions && (
+          <Text style={[styles.cardNotes, { color: colors.muted, marginTop: 8 }]}>
+            {item.instructions}
+          </Text>
+        )}
+      </View>
+    );
+  };
+
   const renderEmptyState = (type: string, onAdd: () => void) => (
     <View style={styles.emptyState}>
       <IconSymbol
-        name={type === "records" ? "doc.fill" : type === "vaccinations" ? "heart.fill" : "bell.fill"}
+        name={type === "records" ? "doc.fill" : type === "vaccinations" ? "heart.fill" : type === "medications" ? "pills.fill" : "bell.fill"}
         size={48}
         color={colors.muted}
       />
@@ -370,7 +508,7 @@ export default function PetProfileScreen() {
 
         {/* Tabs */}
         <View style={[styles.tabs, { borderBottomColor: colors.border }]}>
-          {(["records", "vaccinations", "reminders"] as TabType[]).map((tab) => (
+          {(["records", "vaccinations", "medications", "reminders"] as TabType[]).map((tab) => (
             <TouchableOpacity
               key={tab}
               onPress={() => setActiveTab(tab)}
@@ -477,6 +615,24 @@ export default function PetProfileScreen() {
             </>
           )}
 
+          {activeTab === "medications" && (
+            <>
+              {medications.length === 0 ? (
+                renderEmptyState("medications", handleAddMedication)
+              ) : (
+                <FlatList
+                  data={medications.sort(
+                    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+                  )}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderMedicationCard}
+                  scrollEnabled={false}
+                  contentContainerStyle={styles.cardList}
+                />
+              )}
+            </>
+          )}
+
           {activeTab === "reminders" && (
             <>
               {reminders.length === 0 ? (
@@ -504,6 +660,8 @@ export default function PetProfileScreen() {
             ? handleAddDocument
             : activeTab === "vaccinations"
             ? handleAddVaccination
+            : activeTab === "medications"
+            ? handleAddMedication
             : handleAddReminder
         }
         style={[styles.fab, { backgroundColor: colors.primary }]}
@@ -731,5 +889,10 @@ const styles = StyleSheet.create({
   viewHintText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  logDoseButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
 });

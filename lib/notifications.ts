@@ -1,7 +1,7 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Reminder, Vaccination } from "@/shared/pet-types";
+import { Reminder, Vaccination, Medication, MedicationFrequency } from "@/shared/pet-types";
 
 const NOTIFICATION_SETTINGS_KEY = "petfolio_notification_settings";
 
@@ -21,6 +21,8 @@ export interface NotificationSettings {
   reminderNotifications: boolean;
   vaccinationWarnings: boolean;
   vaccinationWarningDays: number; // Days before expiration to warn
+  medicationReminders: boolean;
+  refillReminders: boolean;
 }
 
 const defaultSettings: NotificationSettings = {
@@ -28,6 +30,8 @@ const defaultSettings: NotificationSettings = {
   reminderNotifications: true,
   vaccinationWarnings: true,
   vaccinationWarningDays: 7,
+  medicationReminders: true,
+  refillReminders: true,
 };
 
 // Request notification permissions
@@ -260,4 +264,138 @@ export async function cancelAllNotifications(): Promise<void> {
     return;
   }
   await Notifications.cancelAllScheduledNotificationsAsync();
+}
+
+// Get dose times based on frequency
+function getDoseTimesForFrequency(frequency: MedicationFrequency): { hour: number; minute: number }[] {
+  switch (frequency) {
+    case "once_daily":
+      return [{ hour: 9, minute: 0 }]; // 9 AM
+    case "twice_daily":
+      return [{ hour: 9, minute: 0 }, { hour: 21, minute: 0 }]; // 9 AM, 9 PM
+    case "three_times_daily":
+      return [{ hour: 8, minute: 0 }, { hour: 14, minute: 0 }, { hour: 20, minute: 0 }]; // 8 AM, 2 PM, 8 PM
+    case "every_other_day":
+      return [{ hour: 9, minute: 0 }]; // 9 AM
+    case "weekly":
+      return [{ hour: 9, minute: 0 }]; // 9 AM
+    case "monthly":
+      return [{ hour: 9, minute: 0 }]; // 9 AM
+    default:
+      return [];
+  }
+}
+
+// Schedule medication dose reminders
+export async function scheduleMedicationReminders(
+  medication: Medication,
+  petName: string
+): Promise<string[]> {
+  if (Platform.OS === "web") {
+    return [];
+  }
+
+  const settings = await getNotificationSettings();
+  if (!settings.enabled || !settings.medicationReminders) {
+    return [];
+  }
+
+  // Skip if as_needed frequency
+  if (medication.frequency === "as_needed") {
+    return [];
+  }
+
+  const notificationIds: string[] = [];
+  const doseTimes = getDoseTimesForFrequency(medication.frequency);
+
+  // Cancel existing notifications for this medication
+  await cancelMedicationNotifications(medication.id);
+
+  try {
+    for (let i = 0; i < doseTimes.length; i++) {
+      const doseTime = doseTimes[i];
+      
+      // Schedule daily repeating notification
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `Time for ${petName}'s medication`,
+          body: `Give ${medication.name} (${medication.dosage})${medication.instructions ? ` - ${medication.instructions}` : ""}`,
+          data: { type: "medication", medicationId: medication.id, petId: medication.petId },
+          sound: true,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour: doseTime.hour,
+          minute: doseTime.minute,
+        },
+        identifier: `med-dose-${medication.id}-${i}`,
+      });
+      notificationIds.push(id);
+    }
+  } catch (error) {
+    console.error("Error scheduling medication reminders:", error);
+  }
+
+  return notificationIds;
+}
+
+// Schedule refill reminder notification
+export async function scheduleRefillReminder(
+  medication: Medication,
+  petName: string
+): Promise<string | null> {
+  if (Platform.OS === "web") {
+    return null;
+  }
+
+  const settings = await getNotificationSettings();
+  if (!settings.enabled || !settings.refillReminders) {
+    return null;
+  }
+
+  // Skip if no refill tracking
+  if (medication.pillsRemaining === undefined || medication.refillReminderAt === undefined) {
+    return null;
+  }
+
+  // Cancel existing refill notification
+  await cancelNotification(`med-refill-${medication.id}`);
+
+  // Check if we need to send a refill reminder now
+  if (medication.pillsRemaining <= medication.refillReminderAt) {
+    try {
+      // Schedule for tomorrow morning as a reminder
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(9, 0, 0, 0);
+
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `Refill Reminder: ${medication.name}`,
+          body: `${petName}'s ${medication.name} is running low (${medication.pillsRemaining} pills remaining). Time to refill!`,
+          data: { type: "refill", medicationId: medication.id, petId: medication.petId },
+          sound: true,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: tomorrow,
+        },
+        identifier: `med-refill-${medication.id}`,
+      });
+      return id;
+    } catch (error) {
+      console.error("Error scheduling refill reminder:", error);
+    }
+  }
+
+  return null;
+}
+
+// Cancel all notifications for a medication
+export async function cancelMedicationNotifications(medicationId: string): Promise<void> {
+  // Cancel up to 3 dose reminders
+  for (let i = 0; i < 3; i++) {
+    await cancelNotification(`med-dose-${medicationId}-${i}`);
+  }
+  await cancelNotification(`med-refill-${medicationId}`);
 }

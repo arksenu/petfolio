@@ -43,6 +43,8 @@ describe("Notification Settings", () => {
       reminderNotifications: true,
       vaccinationWarnings: true,
       vaccinationWarningDays: 7,
+      medicationReminders: true,
+      refillReminders: true,
     });
   });
 

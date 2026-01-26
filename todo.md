@@ -102,3 +102,13 @@
 - [x] Cloud sync - sync pet data to backend for signed-in users
 - [x] Document search - search documents by title/category across all pets
 - [x] Pet weight tracking - record weight history with visual chart
+
+## Features (v1.7) - Medication Tracking
+- [x] Medication data model (name, dosage, frequency, start/end dates, refill info)
+- [x] Add medication screen with dosage schedule options
+- [x] Medications tab on pet profile
+- [x] Medication card with next dose indicator
+- [x] Log dose taken functionality
+- [x] Dose reminder notifications
+- [x] Refill reminder notifications
+- [x] Edit/delete medication functionality

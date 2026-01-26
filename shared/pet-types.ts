@@ -66,6 +66,39 @@ export interface WeightEntry {
   createdAt: string;
 }
 
+export type MedicationFrequency = 'once_daily' | 'twice_daily' | 'three_times_daily' | 'every_other_day' | 'weekly' | 'monthly' | 'as_needed';
+
+export interface DoseLog {
+  id: string;
+  medicationId: string;
+  takenAt: string; // ISO datetime string
+  skipped?: boolean;
+  notes?: string;
+}
+
+export interface Medication {
+  id: string;
+  petId: string;
+  name: string;
+  dosage: string; // e.g., "10mg", "1 tablet"
+  frequency: MedicationFrequency;
+  instructions?: string; // e.g., "Give with food"
+  startDate: string; // ISO date string
+  endDate?: string; // ISO date string (optional for ongoing meds)
+  isOngoing: boolean;
+  // Refill tracking
+  pillsRemaining?: number;
+  pillsPerRefill?: number;
+  refillReminderAt?: number; // Remind when this many pills left
+  // Notification IDs
+  doseNotificationIds?: string[];
+  refillNotificationId?: string;
+  // Dose history
+  doseLog: DoseLog[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Common vaccine types with default expiration periods (in months)
 export const COMMON_VACCINES: { name: string; expirationMonths: number }[] = [
   { name: 'Rabies (1 year)', expirationMonths: 12 },
@@ -93,6 +126,29 @@ export const DOCUMENT_CATEGORIES: { value: DocumentCategory; label: string }[] =
   { value: 'prescription', label: 'Prescription' },
   { value: 'insurance', label: 'Insurance' },
   { value: 'other', label: 'Other' },
+];
+
+export const MEDICATION_FREQUENCIES: { value: MedicationFrequency; label: string; timesPerDay: number }[] = [
+  { value: 'once_daily', label: 'Once daily', timesPerDay: 1 },
+  { value: 'twice_daily', label: 'Twice daily', timesPerDay: 2 },
+  { value: 'three_times_daily', label: 'Three times daily', timesPerDay: 3 },
+  { value: 'every_other_day', label: 'Every other day', timesPerDay: 0.5 },
+  { value: 'weekly', label: 'Weekly', timesPerDay: 0.14 },
+  { value: 'monthly', label: 'Monthly', timesPerDay: 0.033 },
+  { value: 'as_needed', label: 'As needed', timesPerDay: 0 },
+];
+
+export const COMMON_MEDICATIONS: { name: string; defaultDosage: string }[] = [
+  { name: 'Apoquel', defaultDosage: '16mg' },
+  { name: 'Carprofen', defaultDosage: '75mg' },
+  { name: 'Gabapentin', defaultDosage: '100mg' },
+  { name: 'Trazodone', defaultDosage: '50mg' },
+  { name: 'Prednisone', defaultDosage: '5mg' },
+  { name: 'Metronidazole', defaultDosage: '250mg' },
+  { name: 'Amoxicillin', defaultDosage: '250mg' },
+  { name: 'Heartgard', defaultDosage: '1 chew' },
+  { name: 'NexGard', defaultDosage: '1 chew' },
+  { name: 'Simparica', defaultDosage: '1 tablet' },
 ];
 
 // Helper function to calculate vaccination status
