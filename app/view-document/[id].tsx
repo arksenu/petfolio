@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Text,
   View,
@@ -26,6 +26,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
 import { formatDate, DOCUMENT_CATEGORIES } from "@/shared/pet-types";
+import { PdfViewer } from "@/components/pdf-viewer";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -42,7 +43,7 @@ export default function ViewDocumentScreen() {
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
 
-  // Pinch-to-zoom and pan values
+  // Pinch-to-zoom and pan values for images
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -133,8 +134,6 @@ export default function ViewDocumentScreen() {
   const fileType = document.fileType || "image";
   const isPdf = fileType === "pdf";
   const isDocument = fileType === "document";
-  
-  // Check if it's a viewable image type
   const isImage = !isPdf && !isDocument;
 
   const handleClose = () => {
@@ -156,23 +155,31 @@ export default function ViewDocumentScreen() {
     }
   };
 
-  // Render PDF/Document placeholder with share option
-  const renderPdfOrDocumentView = () => {
-    const iconName = isPdf ? "doc.fill" : "doc.text.fill";
-    const iconColor = isPdf ? "#E74C3C" : colors.primary;
-    const fileTypeLabel = isPdf ? "PDF Document" : "Document File";
-    
+  // Render PDF viewer
+  const renderPdfViewer = () => {
+    return (
+      <View style={styles.pdfContainer}>
+        <PdfViewer 
+          uri={document.fileUri} 
+          onShare={handleShare}
+        />
+      </View>
+    );
+  };
+
+  // Render document placeholder (for non-PDF documents like Word)
+  const renderDocumentPlaceholder = () => {
     return (
       <View style={styles.placeholderContainer}>
         <View style={[styles.placeholderContent, { backgroundColor: colors.background }]}>
-          <View style={[styles.placeholderIconContainer, { backgroundColor: iconColor + "20" }]}>
-            <IconSymbol name={iconName} size={64} color={iconColor} />
+          <View style={[styles.placeholderIconContainer, { backgroundColor: colors.primary + "20" }]}>
+            <IconSymbol name="doc.text.fill" size={64} color={colors.primary} />
           </View>
           <Text style={[styles.placeholderFileName, { color: colors.foreground }]}>
             {document.fileName || document.title}
           </Text>
           <Text style={[styles.placeholderFileType, { color: colors.muted }]}>
-            {fileTypeLabel}
+            Document File
           </Text>
           
           <View style={styles.placeholderActions}>
@@ -186,26 +193,8 @@ export default function ViewDocumentScreen() {
           </View>
           
           <Text style={[styles.placeholderHint, { color: colors.muted }]}>
-            Tap "Open with..." to view this document in your preferred app (Files, PDF viewer, etc.)
+            This document type requires an external app to view.
           </Text>
-          
-          {/* Document info */}
-          <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, { color: colors.muted }]}>Category</Text>
-              <Text style={[styles.infoValue, { color: colors.foreground }]}>{categoryLabel}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, { color: colors.muted }]}>Date</Text>
-              <Text style={[styles.infoValue, { color: colors.foreground }]}>{formatDate(document.date)}</Text>
-            </View>
-            {document.notes && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.infoLabel, { color: colors.muted }]}>Notes</Text>
-                <Text style={[styles.infoValue, { color: colors.foreground }]} numberOfLines={3}>{document.notes}</Text>
-              </View>
-            )}
-          </View>
         </View>
       </View>
     );
@@ -270,8 +259,10 @@ export default function ViewDocumentScreen() {
   };
 
   const renderContent = () => {
-    if (isPdf || isDocument) {
-      return renderPdfOrDocumentView();
+    if (isPdf) {
+      return renderPdfViewer();
+    } else if (isDocument) {
+      return renderDocumentPlaceholder();
     } else {
       return renderImageViewer();
     }
@@ -459,6 +450,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 8,
   },
+  pdfContainer: {
+    flex: 1,
+    marginTop: Platform.OS === "ios" ? 110 : 90,
+  },
   placeholderContainer: {
     flex: 1,
     marginTop: Platform.OS === "ios" ? 110 : 90,
@@ -508,26 +503,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 18,
     maxWidth: 280,
-    marginBottom: 24,
-  },
-  infoCard: {
-    width: "100%",
-    maxWidth: 320,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 16,
-  },
-  infoRow: {
-    marginBottom: 12,
-  },
-  infoLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
-  infoValue: {
-    fontSize: 15,
-    lineHeight: 20,
   },
 });

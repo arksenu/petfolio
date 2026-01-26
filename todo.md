@@ -94,3 +94,6 @@
 - [x] Fix date picker - greyed out items due to minimumDate constraint on date of birth
 - [x] Fix date picker - wheels don't snap to values properly
 - [x] Fix document viewer - loading forever for local files (images/PDFs stored on device)
+
+## Features (v1.5)
+- [x] In-app PDF viewer - display PDFs directly with scrolling support
