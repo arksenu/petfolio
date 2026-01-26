@@ -13,6 +13,7 @@ import {
 import { Image } from "expo-image";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
 
 import { ScreenContainer } from "@/components/screen-container";
@@ -21,6 +22,20 @@ import { DatePickerModal } from "@/components/date-picker-modal";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
 import { DocumentCategory, DOCUMENT_CATEGORIES } from "@/shared/pet-types";
+
+// File type detection helper
+function getFileType(uri: string, mimeType?: string): "image" | "pdf" | "document" {
+  const lowerUri = uri.toLowerCase();
+  const lowerMime = (mimeType || "").toLowerCase();
+  
+  if (lowerMime.includes("pdf") || lowerUri.endsWith(".pdf")) {
+    return "pdf";
+  }
+  if (lowerMime.includes("image") || /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(lowerUri)) {
+    return "image";
+  }
+  return "document";
+}
 
 export default function AddDocumentScreen() {
   const router = useRouter();
@@ -35,6 +50,8 @@ export default function AddDocumentScreen() {
   const [date, setDate] = useState(new Date());
   const [notes, setNotes] = useState("");
   const [fileUri, setFileUri] = useState<string | undefined>();
+  const [fileType, setFileType] = useState<"image" | "pdf" | "document">("image");
+  const [fileName, setFileName] = useState<string | undefined>();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!pet) {
@@ -59,6 +76,8 @@ export default function AddDocumentScreen() {
 
     if (!result.canceled && result.assets[0]) {
       setFileUri(result.assets[0].uri);
+      setFileType("image");
+      setFileName(undefined);
     }
   };
 
@@ -77,6 +96,38 @@ export default function AddDocumentScreen() {
 
     if (!result.canceled && result.assets[0]) {
       setFileUri(result.assets[0].uri);
+      setFileType("image");
+      setFileName(undefined);
+    }
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "application/pdf",
+          "image/*",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ],
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        setFileUri(asset.uri);
+        setFileType(getFileType(asset.uri, asset.mimeType || undefined));
+        setFileName(asset.name);
+        
+        // Auto-fill title from filename if empty
+        if (!title && asset.name) {
+          const nameWithoutExt = asset.name.replace(/\.[^/.]+$/, "");
+          setTitle(nameWithoutExt);
+        }
+      }
+    } catch (error) {
+      console.error("Document picker error:", error);
+      Alert.alert("Error", "Failed to pick document. Please try again.");
     }
   };
 
@@ -87,7 +138,7 @@ export default function AddDocumentScreen() {
     }
 
     if (!fileUri) {
-      Alert.alert("Required Field", "Please capture or upload a document image.");
+      Alert.alert("Required Field", "Please capture or upload a document.");
       return;
     }
 
@@ -102,6 +153,8 @@ export default function AddDocumentScreen() {
         title: title.trim(),
         category,
         fileUri,
+        fileType,
+        fileName,
         date: date.toISOString(),
         notes: notes.trim() || undefined,
       });
@@ -119,6 +172,57 @@ export default function AddDocumentScreen() {
 
   const handleClose = () => {
     router.back();
+  };
+
+  const clearFile = () => {
+    setFileUri(undefined);
+    setFileName(undefined);
+    setFileType("image");
+  };
+
+  const renderFilePreview = () => {
+    if (!fileUri) return null;
+
+    if (fileType === "image") {
+      return (
+        <View style={styles.previewContainer}>
+          <Image source={{ uri: fileUri }} style={styles.preview} contentFit="contain" />
+          <TouchableOpacity
+            onPress={clearFile}
+            style={[styles.removeButton, { backgroundColor: colors.error }]}
+          >
+            <IconSymbol name="xmark" size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // PDF or document preview
+    return (
+      <View style={[styles.documentPreview, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={[styles.documentIconContainer, { backgroundColor: fileType === "pdf" ? "#E74C3C20" : colors.primary + "20" }]}>
+          <IconSymbol 
+            name={fileType === "pdf" ? "doc.fill" : "doc.text.fill"} 
+            size={40} 
+            color={fileType === "pdf" ? "#E74C3C" : colors.primary} 
+          />
+        </View>
+        <View style={styles.documentInfo}>
+          <Text style={[styles.documentName, { color: colors.foreground }]} numberOfLines={2}>
+            {fileName || "Document"}
+          </Text>
+          <Text style={[styles.documentType, { color: colors.muted }]}>
+            {fileType === "pdf" ? "PDF Document" : "Document File"}
+          </Text>
+        </View>
+        <TouchableOpacity
+          onPress={clearFile}
+          style={[styles.removeDocButton, { backgroundColor: colors.error + "20" }]}
+        >
+          <IconSymbol name="xmark" size={18} color={colors.error} />
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   return (
@@ -139,15 +243,7 @@ export default function AddDocumentScreen() {
           {/* Document Capture Section */}
           <View style={styles.captureSection}>
             {fileUri ? (
-              <View style={styles.previewContainer}>
-                <Image source={{ uri: fileUri }} style={styles.preview} contentFit="contain" />
-                <TouchableOpacity
-                  onPress={() => setFileUri(undefined)}
-                  style={[styles.removeButton, { backgroundColor: colors.error }]}
-                >
-                  <IconSymbol name="xmark" size={16} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
+              renderFilePreview()
             ) : (
               <View style={styles.captureButtons}>
                 <TouchableOpacity
@@ -157,13 +253,28 @@ export default function AddDocumentScreen() {
                   <IconSymbol name="camera.fill" size={32} color="#FFFFFF" />
                   <Text style={styles.captureButtonText}>Capture Document</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={handlePickImage}
-                  style={[styles.uploadButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                >
-                  <IconSymbol name="photo.fill" size={24} color={colors.primary} />
-                  <Text style={[styles.uploadButtonText, { color: colors.primary }]}>Upload from Gallery</Text>
-                </TouchableOpacity>
+                
+                <View style={styles.uploadRow}>
+                  <TouchableOpacity
+                    onPress={handlePickImage}
+                    style={[styles.halfButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  >
+                    <IconSymbol name="photo.fill" size={22} color={colors.primary} />
+                    <Text style={[styles.halfButtonText, { color: colors.primary }]}>Gallery</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    onPress={handlePickDocument}
+                    style={[styles.halfButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  >
+                    <IconSymbol name="doc.fill" size={22} color={colors.primary} />
+                    <Text style={[styles.halfButtonText, { color: colors.primary }]}>Files</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <Text style={[styles.supportedFormats, { color: colors.muted }]}>
+                  Supported: Images, PDF, Word documents
+                </Text>
               </View>
             )}
           </View>
@@ -298,18 +409,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  uploadButton: {
+  uploadRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  halfButton: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
     gap: 8,
   },
-  uploadButtonText: {
+  halfButtonText: {
     fontSize: 15,
     fontWeight: "500",
+  },
+  supportedFormats: {
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 4,
   },
   previewContainer: {
     position: "relative",
@@ -328,6 +449,39 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  documentPreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+  },
+  documentIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  documentInfo: {
+    flex: 1,
+  },
+  documentName: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  documentType: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  removeDocButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },

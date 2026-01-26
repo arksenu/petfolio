@@ -21,12 +21,16 @@ export interface Pet {
   updatedAt: string;
 }
 
+export type FileType = 'image' | 'pdf' | 'document';
+
 export interface PetDocument {
   id: string;
   petId: string;
   title: string;
   category: DocumentCategory;
   fileUri: string;
+  fileType?: FileType; // Type of file (image, pdf, document)
+  fileName?: string; // Original file name for documents
   date: string; // ISO date string
   notes?: string;
   createdAt: string;

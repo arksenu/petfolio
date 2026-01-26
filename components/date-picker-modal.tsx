@@ -6,6 +6,7 @@ import {
   Modal,
   StyleSheet,
   Platform,
+  useColorScheme,
 } from "react-native";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { useColors } from "@/hooks/use-colors";
@@ -28,6 +29,7 @@ export function DatePickerModal({
   label,
 }: DatePickerModalProps) {
   const colors = useColors();
+  const colorScheme = useColorScheme();
   const [showPicker, setShowPicker] = useState(false);
   const [tempDate, setTempDate] = useState(value);
 
@@ -138,7 +140,7 @@ export function DatePickerModal({
           <View
             style={[
               styles.modalContent,
-              { backgroundColor: colors.surface },
+              { backgroundColor: colorScheme === "dark" ? "#1c1c1e" : "#ffffff" },
             ]}
           >
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
@@ -152,16 +154,18 @@ export function DatePickerModal({
                 <Text style={[styles.confirmText, { color: colors.primary }]}>Done</Text>
               </TouchableOpacity>
             </View>
-            <DateTimePicker
-              value={tempDate}
-              mode={mode === "datetime" ? "date" : mode}
-              display="spinner"
-              minimumDate={minimumDate}
-              maximumDate={maximumDate}
-              onChange={handleChange}
-              style={styles.picker}
-              textColor={colors.foreground}
-            />
+            <View style={styles.pickerContainer}>
+              <DateTimePicker
+                value={tempDate}
+                mode={mode === "datetime" ? "date" : mode}
+                display="spinner"
+                minimumDate={minimumDate}
+                maximumDate={maximumDate}
+                onChange={handleChange}
+                themeVariant={colorScheme === "dark" ? "dark" : "light"}
+                style={styles.picker}
+              />
+            </View>
           </View>
         </View>
       </Modal>
@@ -178,6 +182,7 @@ interface TimePickerModalProps {
 
 export function TimePickerModal({ value, onChange, label }: TimePickerModalProps) {
   const colors = useColors();
+  const colorScheme = useColorScheme();
   const [showPicker, setShowPicker] = useState(false);
   const [tempDate, setTempDate] = useState(value);
 
@@ -271,7 +276,7 @@ export function TimePickerModal({ value, onChange, label }: TimePickerModalProps
           <View
             style={[
               styles.modalContent,
-              { backgroundColor: colors.surface },
+              { backgroundColor: colorScheme === "dark" ? "#1c1c1e" : "#ffffff" },
             ]}
           >
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
@@ -285,14 +290,16 @@ export function TimePickerModal({ value, onChange, label }: TimePickerModalProps
                 <Text style={[styles.confirmText, { color: colors.primary }]}>Done</Text>
               </TouchableOpacity>
             </View>
-            <DateTimePicker
-              value={tempDate}
-              mode="time"
-              display="spinner"
-              onChange={handleChange}
-              style={styles.picker}
-              textColor={colors.foreground}
-            />
+            <View style={styles.pickerContainer}>
+              <DateTimePicker
+                value={tempDate}
+                mode="time"
+                display="spinner"
+                onChange={handleChange}
+                themeVariant={colorScheme === "dark" ? "dark" : "light"}
+                style={styles.picker}
+              />
+            </View>
           </View>
         </View>
       </Modal>
@@ -343,7 +350,13 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600",
   },
+  pickerContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+  },
   picker: {
-    height: 200,
+    width: "100%",
+    height: 216,
   },
 });

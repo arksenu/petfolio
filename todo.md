@@ -80,3 +80,8 @@
 - [x] Push notifications for vaccination expiration warnings
 - [x] User authentication (sign up, sign in)
 - [ ] Cloud sync with backend database
+
+## Bug Fixes (v1.2)
+- [x] Fix date picker - date wheel not visible in modal on iOS
+- [x] Enable PDF and document file uploads (not just images)
+- [x] Add PDF viewer for viewing uploaded PDF documents

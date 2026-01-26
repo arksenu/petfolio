@@ -8,6 +8,8 @@ import {
   Platform,
   Share,
   Alert,
+  Linking,
+  ScrollView,
 } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -127,6 +129,9 @@ export default function ViewDocumentScreen() {
   }
 
   const categoryLabel = DOCUMENT_CATEGORIES.find((c) => c.value === document.category)?.label || document.category;
+  const fileType = document.fileType || "image";
+  const isPdf = fileType === "pdf";
+  const isDocument = fileType === "document";
 
   const handleClose = () => {
     router.back();
@@ -147,44 +152,122 @@ export default function ViewDocumentScreen() {
     }
   };
 
+  const handleOpenExternal = async () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    try {
+      const supported = await Linking.canOpenURL(document.fileUri);
+      if (supported) {
+        await Linking.openURL(document.fileUri);
+      } else {
+        Alert.alert("Error", "Cannot open this file type. Try sharing it to another app.");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to open document.");
+    }
+  };
+
+  // Render PDF or document view
+  const renderPdfOrDocumentView = () => {
+    return (
+      <View style={styles.pdfContainer}>
+        <View style={[styles.pdfPlaceholder, { backgroundColor: colors.surface }]}>
+          <View style={[styles.pdfIconContainer, { backgroundColor: isPdf ? "#E74C3C20" : colors.primary + "20" }]}>
+            <IconSymbol 
+              name={isPdf ? "doc.fill" : "doc.text.fill"} 
+              size={64} 
+              color={isPdf ? "#E74C3C" : colors.primary} 
+            />
+          </View>
+          <Text style={[styles.pdfFileName, { color: colors.foreground }]}>
+            {document.fileName || document.title}
+          </Text>
+          <Text style={[styles.pdfFileType, { color: colors.muted }]}>
+            {isPdf ? "PDF Document" : "Document File"}
+          </Text>
+          
+          <View style={styles.pdfActions}>
+            <TouchableOpacity
+              onPress={handleOpenExternal}
+              style={[styles.pdfActionButton, { backgroundColor: colors.primary }]}
+            >
+              <IconSymbol name="arrow.up.right.square" size={20} color="#FFFFFF" />
+              <Text style={styles.pdfActionText}>Open in External App</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={handleShare}
+              style={[styles.pdfActionButtonSecondary, { borderColor: colors.border }]}
+            >
+              <IconSymbol name="square.and.arrow.up" size={20} color={colors.primary} />
+              <Text style={[styles.pdfActionTextSecondary, { color: colors.primary }]}>Share</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <Text style={[styles.pdfHint, { color: colors.muted }]}>
+            Tap "Open in External App" to view the full document in your device's default viewer
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  // Render image viewer
+  const renderImageViewer = () => {
+    return (
+      <GestureDetector gesture={composedGesture}>
+        <View style={styles.imageContainer}>
+          <Animated.View style={[styles.imageWrapper, animatedStyle]}>
+            <Image
+              source={{ uri: document.fileUri }}
+              style={styles.image}
+              contentFit="contain"
+            />
+          </Animated.View>
+        </View>
+      </GestureDetector>
+    );
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <View style={[styles.container, { backgroundColor: "#000000" }]}>
+      <View style={[styles.container, { backgroundColor: isPdf || isDocument ? colors.background : "#000000" }]}>
         {/* Header */}
         {showControls && (
-          <View style={[styles.header, { backgroundColor: "rgba(0,0,0,0.7)" }]}>
+          <View style={[
+            styles.header, 
+            { backgroundColor: isPdf || isDocument ? colors.surface : "rgba(0,0,0,0.7)" }
+          ]}>
             <TouchableOpacity onPress={handleClose} style={styles.headerButton}>
-              <IconSymbol name="xmark" size={24} color="#FFFFFF" />
+              <IconSymbol name="xmark" size={24} color={isPdf || isDocument ? colors.foreground : "#FFFFFF"} />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
-              <Text style={styles.headerTitle} numberOfLines={1}>
+              <Text 
+                style={[styles.headerTitle, { color: isPdf || isDocument ? colors.foreground : "#FFFFFF" }]} 
+                numberOfLines={1}
+              >
                 {document.title}
               </Text>
-              <Text style={styles.headerSubtitle}>
+              <Text style={[styles.headerSubtitle, { color: isPdf || isDocument ? colors.muted : "rgba(255,255,255,0.7)" }]}>
                 {pet?.name} • {formatDate(document.date)}
               </Text>
             </View>
-            <TouchableOpacity onPress={handleShare} style={styles.headerButton}>
-              <IconSymbol name="square.and.arrow.up" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
+            {!isPdf && !isDocument && (
+              <TouchableOpacity onPress={handleShare} style={styles.headerButton}>
+                <IconSymbol name="square.and.arrow.up" size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+            {(isPdf || isDocument) && <View style={styles.headerButton} />}
           </View>
         )}
 
-        {/* Image Viewer */}
-        <GestureDetector gesture={composedGesture}>
-          <View style={styles.imageContainer}>
-            <Animated.View style={[styles.imageWrapper, animatedStyle]}>
-              <Image
-                source={{ uri: document.fileUri }}
-                style={styles.image}
-                contentFit="contain"
-              />
-            </Animated.View>
-          </View>
-        </GestureDetector>
+        {/* Content */}
+        {isPdf || isDocument ? renderPdfOrDocumentView() : renderImageViewer()}
 
-        {/* Footer Info */}
-        {showControls && (
+        {/* Footer Info - only for images */}
+        {showControls && !isPdf && !isDocument && (
           <View style={[styles.footer, { backgroundColor: "rgba(0,0,0,0.7)" }]}>
             <View style={[styles.categoryBadge, { backgroundColor: colors.primary }]}>
               <Text style={styles.categoryText}>{categoryLabel}</Text>
@@ -197,6 +280,14 @@ export default function ViewDocumentScreen() {
             <Text style={styles.hintText}>
               Pinch to zoom • Double-tap to toggle zoom • Tap to show/hide controls
             </Text>
+          </View>
+        )}
+
+        {/* Footer for PDF/Document */}
+        {(isPdf || isDocument) && document.notes && (
+          <View style={[styles.pdfFooter, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+            <Text style={[styles.notesLabel, { color: colors.muted }]}>Notes</Text>
+            <Text style={[styles.pdfNotesText, { color: colors.foreground }]}>{document.notes}</Text>
           </View>
         )}
       </View>
@@ -232,12 +323,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   headerTitle: {
-    color: "#FFFFFF",
     fontSize: 17,
     fontWeight: "600",
   },
   headerSubtitle: {
-    color: "rgba(255,255,255,0.7)",
     fontSize: 13,
     marginTop: 2,
   },
@@ -286,5 +375,88 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.5)",
     fontSize: 12,
     marginTop: 4,
+  },
+  // PDF/Document styles
+  pdfContainer: {
+    flex: 1,
+    paddingTop: Platform.OS === "ios" ? 120 : 100,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  pdfPlaceholder: {
+    flex: 1,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  pdfIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  pdfFileName: {
+    fontSize: 18,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  pdfFileType: {
+    fontSize: 14,
+    marginBottom: 32,
+  },
+  pdfActions: {
+    width: "100%",
+    gap: 12,
+    marginBottom: 24,
+  },
+  pdfActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  pdfActionText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  pdfActionButtonSecondary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  pdfActionTextSecondary: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  pdfHint: {
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18,
+    paddingHorizontal: 20,
+  },
+  pdfFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+  },
+  notesLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  pdfNotesText: {
+    fontSize: 15,
+    lineHeight: 22,
   },
 });
