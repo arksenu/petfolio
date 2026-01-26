@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Pet,
@@ -7,6 +7,12 @@ import {
   Reminder,
   generateId,
 } from '@/shared/pet-types';
+import {
+  scheduleReminderNotification,
+  scheduleVaccinationWarnings,
+  cancelReminderNotifications,
+  cancelVaccinationNotifications,
+} from './notifications';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -127,6 +133,7 @@ interface PetContextType {
   addDocument: (doc: Omit<PetDocument, 'id' | 'createdAt'>) => Promise<PetDocument>;
   updateDocument: (doc: PetDocument) => Promise<void>;
   deleteDocument: (id: string) => Promise<void>;
+  getDocument: (id: string) => PetDocument | undefined;
   getDocumentsForPet: (petId: string) => PetDocument[];
   // Vaccination actions
   addVaccination: (vax: Omit<Vaccination, 'id' | 'createdAt'>) => Promise<Vaccination>;
@@ -215,6 +222,17 @@ export function PetProvider({ children }: { children: ReactNode }) {
   }
 
   async function deletePet(id: string): Promise<void> {
+    // Cancel all notifications for this pet's reminders and vaccinations
+    const petReminders = state.reminders.filter((r) => r.petId === id);
+    const petVaccinations = state.vaccinations.filter((v) => v.petId === id);
+    
+    for (const reminder of petReminders) {
+      await cancelReminderNotifications(reminder.id);
+    }
+    for (const vaccination of petVaccinations) {
+      await cancelVaccinationNotifications(vaccination.id);
+    }
+    
     dispatch({ type: 'DELETE_PET', payload: id });
   }
 
@@ -245,6 +263,10 @@ export function PetProvider({ children }: { children: ReactNode }) {
     return state.documents.filter((d) => d.petId === petId);
   }
 
+  function getDocument(id: string): PetDocument | undefined {
+    return state.documents.find((d) => d.id === id);
+  }
+
   // Vaccination actions
   async function addVaccination(vaxData: Omit<Vaccination, 'id' | 'createdAt'>): Promise<Vaccination> {
     const vax: Vaccination = {
@@ -253,14 +275,28 @@ export function PetProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(),
     };
     dispatch({ type: 'ADD_VACCINATION', payload: vax });
+    
+    // Schedule vaccination warning notifications
+    const pet = state.pets.find((p) => p.id === vaxData.petId);
+    if (pet) {
+      await scheduleVaccinationWarnings(vax, pet.name);
+    }
+    
     return vax;
   }
 
   async function updateVaccination(vax: Vaccination): Promise<void> {
     dispatch({ type: 'UPDATE_VACCINATION', payload: vax });
+    
+    // Reschedule vaccination warning notifications
+    const pet = state.pets.find((p) => p.id === vax.petId);
+    if (pet) {
+      await scheduleVaccinationWarnings(vax, pet.name);
+    }
   }
 
   async function deleteVaccination(id: string): Promise<void> {
+    await cancelVaccinationNotifications(id);
     dispatch({ type: 'DELETE_VACCINATION', payload: id });
   }
 
@@ -276,19 +312,52 @@ export function PetProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(),
     };
     dispatch({ type: 'ADD_REMINDER', payload: reminder });
+    
+    // Schedule reminder notification if enabled
+    if (reminder.isEnabled) {
+      const pet = state.pets.find((p) => p.id === reminderData.petId);
+      if (pet) {
+        await scheduleReminderNotification(reminder, pet.name);
+      }
+    }
+    
     return reminder;
   }
 
   async function updateReminder(reminder: Reminder): Promise<void> {
     dispatch({ type: 'UPDATE_REMINDER', payload: reminder });
+    
+    // Reschedule or cancel notification based on enabled state
+    if (reminder.isEnabled) {
+      const pet = state.pets.find((p) => p.id === reminder.petId);
+      if (pet) {
+        await scheduleReminderNotification(reminder, pet.name);
+      }
+    } else {
+      await cancelReminderNotifications(reminder.id);
+    }
   }
 
   async function deleteReminder(id: string): Promise<void> {
+    await cancelReminderNotifications(id);
     dispatch({ type: 'DELETE_REMINDER', payload: id });
   }
 
   async function toggleReminder(id: string): Promise<void> {
-    dispatch({ type: 'TOGGLE_REMINDER', payload: id });
+    const reminder = state.reminders.find((r) => r.id === id);
+    if (reminder) {
+      const newEnabledState = !reminder.isEnabled;
+      dispatch({ type: 'TOGGLE_REMINDER', payload: id });
+      
+      if (newEnabledState) {
+        const pet = state.pets.find((p) => p.id === reminder.petId);
+        if (pet) {
+          await scheduleReminderNotification({ ...reminder, isEnabled: true }, pet.name);
+        }
+      } else {
+        await cancelReminderNotifications(id);
+      }
+    }
   }
 
   function getRemindersForPet(petId: string): Reminder[] {
@@ -304,6 +373,7 @@ export function PetProvider({ children }: { children: ReactNode }) {
     addDocument,
     updateDocument,
     deleteDocument,
+    getDocument,
     getDocumentsForPet,
     addVaccination,
     updateVaccination,

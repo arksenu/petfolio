@@ -69,3 +69,14 @@
 ## Branding
 - [x] Generate custom app logo
 - [x] Update app configuration
+
+
+## Bug Fixes
+- [x] Fix date picker not showing on mobile devices (add-pet, add-document, add-vaccination, add-reminder screens)
+
+## New Features (v1.1)
+- [x] Document viewer - tap to view uploaded images/PDFs full screen
+- [x] Push notifications for reminders
+- [x] Push notifications for vaccination expiration warnings
+- [x] User authentication (sign up, sign in)
+- [ ] Cloud sync with backend database

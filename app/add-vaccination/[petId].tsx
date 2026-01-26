@@ -12,10 +12,10 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { DatePickerModal } from "@/components/date-picker-modal";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
 import { COMMON_VACCINES } from "@/shared/pet-types";
@@ -31,9 +31,7 @@ export default function AddVaccinationScreen() {
   const [vaccineName, setVaccineName] = useState("");
   const [customVaccine, setCustomVaccine] = useState("");
   const [dateAdministered, setDateAdministered] = useState(new Date());
-  const [showAdministeredPicker, setShowAdministeredPicker] = useState(false);
   const [expirationDate, setExpirationDate] = useState(new Date());
-  const [showExpirationPicker, setShowExpirationPicker] = useState(false);
   const [vetClinicName, setVetClinicName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -171,26 +169,12 @@ export default function AddVaccinationScreen() {
             {/* Date Administered */}
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.foreground }]}>Date Administered</Text>
-              <TouchableOpacity
-                onPress={() => setShowAdministeredPicker(true)}
-                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              >
-                <Text style={{ color: colors.foreground }}>
-                  {dateAdministered.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-                </Text>
-              </TouchableOpacity>
-              {showAdministeredPicker && (
-                <DateTimePicker
-                  value={dateAdministered}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
-                  maximumDate={new Date()}
-                  onChange={(event: any, selectedDate?: Date) => {
-                    setShowAdministeredPicker(Platform.OS === "ios");
-                    if (selectedDate) setDateAdministered(selectedDate);
-                  }}
-                />
-              )}
+              <DatePickerModal
+                value={dateAdministered}
+                onChange={setDateAdministered}
+                maximumDate={new Date()}
+                label="Date Administered"
+              />
             </View>
 
             {/* Expiration Date */}
@@ -201,26 +185,12 @@ export default function AddVaccinationScreen() {
                   <Text style={[styles.autoLabel, { color: colors.primary }]}>Auto-calculated</Text>
                 )}
               </View>
-              <TouchableOpacity
-                onPress={() => setShowExpirationPicker(true)}
-                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              >
-                <Text style={{ color: colors.foreground }}>
-                  {expirationDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-                </Text>
-              </TouchableOpacity>
-              {showExpirationPicker && (
-                <DateTimePicker
-                  value={expirationDate}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
-                  minimumDate={dateAdministered}
-                  onChange={(event: any, selectedDate?: Date) => {
-                    setShowExpirationPicker(Platform.OS === "ios");
-                    if (selectedDate) setExpirationDate(selectedDate);
-                  }}
-                />
-              )}
+              <DatePickerModal
+                value={expirationDate}
+                onChange={setExpirationDate}
+                minimumDate={dateAdministered}
+                label="Expiration Date"
+              />
               <Text style={[styles.hint, { color: colors.muted }]}>
                 You can adjust the expiration date manually if needed.
               </Text>

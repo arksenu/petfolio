@@ -1,4 +1,5 @@
 import { Text, View, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform } from "react-native";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
 import { ScreenContainer } from "@/components/screen-container";
@@ -43,13 +44,24 @@ function SettingsItem({ icon, title, subtitle, onPress, danger }: SettingsItemPr
 
 export default function SettingsScreen() {
   const colors = useColors();
+  const router = useRouter();
 
   const handleNotifications = () => {
-    Alert.alert("Notifications", "Notification preferences will be available in a future update.");
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    router.push("/notification-settings" as any);
   };
 
   const handleExportData = () => {
     Alert.alert("Export Data", "Data export will be available in a future update.");
+  };
+
+  const handleAccount = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    router.push("/account" as any);
   };
 
   const handlePrivacy = () => {
@@ -84,6 +96,16 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.muted }]}>ACCOUNT</Text>
+          <SettingsItem
+            icon="person.fill"
+            title="Account"
+            subtitle="Sign in to sync across devices"
+            onPress={handleAccount}
+          />
+        </View>
+
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.muted }]}>PREFERENCES</Text>
           <SettingsItem

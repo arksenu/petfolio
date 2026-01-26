@@ -158,15 +158,32 @@ export default function PetProfileScreen() {
     }
   };
 
+  const handleViewDocument = (docId: string) => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    router.push(`/view-document/${docId}` as any);
+  };
+
   const renderDocumentCard = ({ item }: { item: PetDocument }) => {
     const categoryLabel = DOCUMENT_CATEGORIES.find((c) => c.value === item.category)?.label || item.category;
     return (
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <TouchableOpacity
+        onPress={() => handleViewDocument(item.id)}
+        style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        activeOpacity={0.7}
+      >
         <View style={styles.cardHeader}>
           <View style={[styles.categoryBadge, { backgroundColor: colors.primary + "20" }]}>
             <Text style={[styles.categoryText, { color: colors.primary }]}>{categoryLabel}</Text>
           </View>
-          <TouchableOpacity onPress={() => handleDeleteDocument(item.id)}>
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation();
+              handleDeleteDocument(item.id);
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <IconSymbol name="trash.fill" size={18} color={colors.error} />
           </TouchableOpacity>
         </View>
@@ -177,7 +194,11 @@ export default function PetProfileScreen() {
             {item.notes}
           </Text>
         )}
-      </View>
+        <View style={styles.viewHint}>
+          <Text style={[styles.viewHintText, { color: colors.primary }]}>Tap to view</Text>
+          <IconSymbol name="chevron.right" size={14} color={colors.primary} />
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -687,5 +708,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 8,
+  },
+  viewHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginTop: 12,
+    gap: 4,
+  },
+  viewHintText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
 });

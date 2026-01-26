@@ -14,10 +14,10 @@ import { Image } from "expo-image";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
-import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { DatePickerModal } from "@/components/date-picker-modal";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
 import { DocumentCategory, DOCUMENT_CATEGORIES } from "@/shared/pet-types";
@@ -33,7 +33,6 @@ export default function AddDocumentScreen() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<DocumentCategory>("vet_visit");
   const [date, setDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [notes, setNotes] = useState("");
   const [fileUri, setFileUri] = useState<string | undefined>();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -216,26 +215,12 @@ export default function AddDocumentScreen() {
             {/* Date */}
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.foreground }]}>Document Date</Text>
-              <TouchableOpacity
-                onPress={() => setShowDatePicker(true)}
-                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              >
-                <Text style={{ color: colors.foreground }}>
-                  {date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-                </Text>
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={date}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
-                  maximumDate={new Date()}
-                  onChange={(event: any, selectedDate?: Date) => {
-                    setShowDatePicker(Platform.OS === "ios");
-                    if (selectedDate) setDate(selectedDate);
-                  }}
-                />
-              )}
+              <DatePickerModal
+                value={date}
+                onChange={setDate}
+                maximumDate={new Date()}
+                label="Document Date"
+              />
             </View>
 
             {/* Notes */}

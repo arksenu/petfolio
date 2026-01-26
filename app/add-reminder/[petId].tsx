@@ -12,10 +12,10 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { DatePickerModal, TimePickerModal } from "@/components/date-picker-modal";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
 
@@ -43,8 +43,6 @@ export default function AddReminderScreen() {
     tomorrow.setHours(9, 0, 0, 0);
     return tomorrow;
   });
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!pet) {
@@ -60,6 +58,18 @@ export default function AddReminderScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+  };
+
+  const handleDateChange = (newDate: Date) => {
+    const updated = new Date(newDate);
+    updated.setHours(date.getHours(), date.getMinutes());
+    setDate(updated);
+  };
+
+  const handleTimeChange = (newDate: Date) => {
+    const updated = new Date(date);
+    updated.setHours(newDate.getHours(), newDate.getMinutes());
+    setDate(updated);
   };
 
   const handleSave = async () => {
@@ -162,58 +172,22 @@ export default function AddReminderScreen() {
             {/* Date */}
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.foreground }]}>Date</Text>
-              <TouchableOpacity
-                onPress={() => setShowDatePicker(true)}
-                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              >
-                <Text style={{ color: colors.foreground }}>
-                  {date.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-                </Text>
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={date}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
-                  minimumDate={new Date()}
-                  onChange={(event: any, selectedDate?: Date) => {
-                    setShowDatePicker(Platform.OS === "ios");
-                    if (selectedDate) {
-                      const newDate = new Date(selectedDate);
-                      newDate.setHours(date.getHours(), date.getMinutes());
-                      setDate(newDate);
-                    }
-                  }}
-                />
-              )}
+              <DatePickerModal
+                value={date}
+                onChange={handleDateChange}
+                minimumDate={new Date()}
+                label="Reminder Date"
+              />
             </View>
 
             {/* Time */}
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.foreground }]}>Time</Text>
-              <TouchableOpacity
-                onPress={() => setShowTimePicker(true)}
-                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              >
-                <Text style={{ color: colors.foreground }}>
-                  {date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
-                </Text>
-              </TouchableOpacity>
-              {showTimePicker && (
-                <DateTimePicker
-                  value={date}
-                  mode="time"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
-                  onChange={(event: any, selectedDate?: Date) => {
-                    setShowTimePicker(Platform.OS === "ios");
-                    if (selectedDate) {
-                      const newDate = new Date(date);
-                      newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
-                      setDate(newDate);
-                    }
-                  }}
-                />
-              )}
+              <TimePickerModal
+                value={date}
+                onChange={handleTimeChange}
+                label="Reminder Time"
+              />
             </View>
 
             {/* Info Box */}

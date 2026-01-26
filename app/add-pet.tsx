@@ -14,10 +14,10 @@ import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
-import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { DatePickerModal } from "@/components/date-picker-modal";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
 import { Species, WeightUnit, SPECIES_OPTIONS } from "@/shared/pet-types";
@@ -31,7 +31,6 @@ export default function AddPetScreen() {
   const [species, setSpecies] = useState<Species>("dog");
   const [breed, setBreed] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [weight, setWeight] = useState("");
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("lb");
   const [microchipNumber, setMicrochipNumber] = useState("");
@@ -223,26 +222,12 @@ export default function AddPetScreen() {
             {/* Date of Birth */}
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.foreground }]}>Date of Birth</Text>
-              <TouchableOpacity
-                onPress={() => setShowDatePicker(true)}
-                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              >
-                <Text style={{ color: colors.foreground }}>
-                  {dateOfBirth.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-                </Text>
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={dateOfBirth}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
-                  maximumDate={new Date()}
-                  onChange={(event: any, date?: Date) => {
-                    setShowDatePicker(Platform.OS === "ios");
-                    if (date) setDateOfBirth(date);
-                  }}
-                />
-              )}
+              <DatePickerModal
+                value={dateOfBirth}
+                onChange={setDateOfBirth}
+                maximumDate={new Date()}
+                label="Date of Birth"
+              />
             </View>
 
             {/* Weight */}
@@ -309,7 +294,7 @@ export default function AddPetScreen() {
             disabled={isSubmitting}
             style={[styles.saveButton, { backgroundColor: colors.primary, opacity: isSubmitting ? 0.7 : 1 }]}
           >
-            <Text style={styles.saveButtonText}>{isSubmitting ? "Saving..." : "Save Pet"}</Text>
+            <Text style={styles.saveButtonText}>{isSubmitting ? "Saving..." : "Add Pet"}</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
