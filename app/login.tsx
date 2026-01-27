@@ -1,13 +1,17 @@
-import { Text, View, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from "react-native";
+import { Text, View, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
+import Constants from "expo-constants";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/hooks/use-auth";
 import { startOAuthLogin } from "@/constants/oauth";
+
+// Check if running in Expo Go
+const isExpoGo = Constants.appOwnership === "expo";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -24,6 +28,24 @@ export default function LoginScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+
+    // On native platforms in Expo Go, show a message about the limitation
+    if (Platform.OS !== "web" && isExpoGo) {
+      Alert.alert(
+        "Sign-In Not Available",
+        "Sign-in is not available in Expo Go due to OAuth redirect limitations.\n\n" +
+        "To use sign-in:\n" +
+        "• Use the web preview at the provided URL\n" +
+        "• Or build a standalone app\n\n" +
+        "You can still use the app locally without signing in.",
+        [
+          { text: "Continue Without Account", onPress: () => router.replace("/(tabs)") },
+          { text: "OK", style: "cancel" },
+        ]
+      );
+      return;
+    }
+
     await startOAuthLogin();
   };
 
@@ -84,13 +106,29 @@ export default function LoginScreen() {
 
         {/* Actions */}
         <View style={styles.actions}>
+          {/* Show Expo Go warning if applicable */}
+          {Platform.OS !== "web" && isExpoGo && (
+            <View style={[styles.warningBanner, { backgroundColor: colors.warning + "20", borderColor: colors.warning }]}>
+              <IconSymbol name="exclamationmark.triangle.fill" size={18} color={colors.warning} />
+              <Text style={[styles.warningText, { color: colors.foreground }]}>
+                Sign-in requires the published app or web preview
+              </Text>
+            </View>
+          )}
+
           <TouchableOpacity
             onPress={handleLogin}
-            style={[styles.loginButton, { backgroundColor: colors.primary }]}
+            style={[
+              styles.loginButton, 
+              { backgroundColor: colors.primary },
+              Platform.OS !== "web" && isExpoGo && styles.loginButtonDisabled
+            ]}
             activeOpacity={0.8}
           >
             <IconSymbol name="person.fill" size={20} color="#FFFFFF" />
-            <Text style={styles.loginButtonText}>Sign In to Sync</Text>
+            <Text style={styles.loginButtonText}>
+              {Platform.OS !== "web" && isExpoGo ? "Sign In (Not Available)" : "Sign In to Sync"}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -195,6 +233,20 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     gap: 12,
   },
+  warningBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 10,
+    marginBottom: 4,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
   loginButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -202,6 +254,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
+  },
+  loginButtonDisabled: {
+    opacity: 0.6,
   },
   loginButtonText: {
     color: "#FFFFFF",

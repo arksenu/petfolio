@@ -118,3 +118,9 @@
 - [x] Implement server-side document upload to S3 storage
 - [x] Update document viewer to use remote URLs for reliable PDF/image viewing
 - [x] Fix image/document display on real iOS devices (now uses cloud storage when signed in)
+
+## Bug Fixes (v1.9)
+- [x] Remove react-native-pdf (not compatible with Expo Go) and use WebView-based PDF viewer
+- [x] Fix Sign Out button not working on desktop (use window.confirm for web platform)
+- [x] Handle Expo Go OAuth redirect_uri limitation gracefully (show warning message)
+- [x] Fix PDF viewer to work on all platforms (web, iOS, Android)

@@ -52,6 +52,10 @@ const MAPPING = {
   "eye.slash.fill": "visibility-off",
   "pills.fill": "medication",
   "folder.fill": "folder",
+  "exclamationmark.triangle.fill": "warning",
+  "icloud.fill": "cloud",
+  "chevron.left": "chevron-left",
+  "arrow.up.forward": "open-in-new",
 } as IconMapping;
 
 /**

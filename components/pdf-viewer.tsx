@@ -1,103 +1,117 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
-  Dimensions,
-  Platform,
   ActivityIndicator,
+  Platform,
+  TouchableOpacity,
+  Linking,
 } from "react-native";
-import Pdf from "react-native-pdf";
+import { WebView } from "react-native-webview";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
-interface PdfViewerProps {
+interface PDFViewerProps {
   uri: string;
   onError?: () => void;
-  onShare?: () => void;
 }
 
-export function PdfViewer({ uri, onError, onShare }: PdfViewerProps) {
+export function PDFViewer({ uri, onError }: PDFViewerProps) {
   const colors = useColors();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [pageCount, setPageCount] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
+
+  // Check if it's a remote URL (http/https)
+  const isRemoteUrl = uri.startsWith("http://") || uri.startsWith("https://");
+
+  // For local files, we can't display them in WebView reliably
+  // Show a fallback with option to open externally
+  if (!isRemoteUrl) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.fallbackContainer, { backgroundColor: colors.surface }]}>
+          <IconSymbol name="doc.fill" size={64} color={colors.muted} />
+          <Text style={[styles.fallbackTitle, { color: colors.foreground }]}>
+            PDF Document
+          </Text>
+          <Text style={[styles.fallbackText, { color: colors.muted }]}>
+            This PDF is stored locally on your device.
+          </Text>
+          <TouchableOpacity
+            style={[styles.openButton, { backgroundColor: colors.primary }]}
+            onPress={() => {
+              // Try to open with system viewer
+              Linking.openURL(uri).catch(() => {
+                if (onError) onError();
+              });
+            }}
+          >
+            <IconSymbol name="arrow.up.forward" size={20} color="#fff" />
+            <Text style={styles.openButtonText}>Open in External App</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // For remote URLs, use Google Docs Viewer (works on all platforms)
+  const googleDocsUrl = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(uri)}`;
 
   if (error) {
     return (
-      <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
-        <View style={[styles.errorIconContainer, { backgroundColor: colors.error + "20" }]}>
-          <IconSymbol name="exclamationmark.circle.fill" size={48} color={colors.error} />
-        </View>
-        <Text style={[styles.errorTitle, { color: colors.foreground }]}>
-          Unable to Load PDF
-        </Text>
-        <Text style={[styles.errorMessage, { color: colors.muted }]}>
-          The PDF couldn't be displayed. Try sharing it to view in another app.
-        </Text>
-        {onShare && (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.fallbackContainer, { backgroundColor: colors.surface }]}>
+          <IconSymbol name="exclamationmark.triangle.fill" size={64} color={colors.error} />
+          <Text style={[styles.fallbackTitle, { color: colors.foreground }]}>
+            Unable to Load PDF
+          </Text>
+          <Text style={[styles.fallbackText, { color: colors.muted }]}>
+            The PDF could not be displayed. Try opening it externally.
+          </Text>
           <TouchableOpacity
-            onPress={onShare}
-            style={[styles.errorButton, { backgroundColor: colors.primary }]}
+            style={[styles.openButton, { backgroundColor: colors.primary }]}
+            onPress={() => Linking.openURL(uri)}
           >
-            <IconSymbol name="square.and.arrow.up" size={20} color="#FFFFFF" />
-            <Text style={styles.errorButtonText}>Share PDF</Text>
+            <IconSymbol name="arrow.up.forward" size={20} color="#fff" />
+            <Text style={styles.openButtonText}>Open in Browser</Text>
           </TouchableOpacity>
-        )}
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Loading indicator */}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {loading && (
-        <View style={[styles.loadingOverlay, { backgroundColor: colors.background }]}>
+        <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.muted }]}>
             Loading PDF...
           </Text>
         </View>
       )}
-
-      {/* PDF Viewer */}
-      <Pdf
-        source={{ uri, cache: true }}
-        style={[styles.pdf, { backgroundColor: colors.background }]}
-        onLoadComplete={(numberOfPages) => {
-          setLoading(false);
-          setPageCount(numberOfPages);
-        }}
-        onPageChanged={(page) => {
-          setCurrentPage(page);
-        }}
-        onError={(err) => {
-          console.log("PDF Error:", err);
+      <WebView
+        source={{ uri: googleDocsUrl }}
+        style={styles.webview}
+        onLoadEnd={() => setLoading(false)}
+        onError={() => {
           setLoading(false);
           setError(true);
-          onError?.();
         }}
-        enablePaging={false}
-        horizontal={false}
-        fitPolicy={0}
-        spacing={8}
-        enableAntialiasing={true}
-        enableAnnotationRendering={true}
-        trustAllCerts={false}
+        onHttpError={() => {
+          setLoading(false);
+          setError(true);
+        }}
+        startInLoadingState={false}
+        scalesPageToFit={true}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        allowsInlineMediaPlayback={true}
+        // Allow scrolling and zooming
+        scrollEnabled={true}
+        bounces={true}
       />
-
-      {/* Page indicator */}
-      {!loading && pageCount > 1 && (
-        <View style={[styles.pageIndicator, { backgroundColor: "rgba(0,0,0,0.6)" }]}>
-          <Text style={styles.pageIndicatorText}>
-            {currentPage} / {pageCount}
-          </Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -106,60 +120,39 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  pdf: {
+  webview: {
     flex: 1,
-    width: SCREEN_WIDTH,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 5,
+    zIndex: 10,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
   },
-  pageIndicator: {
-    position: "absolute",
-    bottom: Platform.OS === "ios" ? 100 : 80,
-    alignSelf: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  pageIndicatorText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  errorContainer: {
+  fallbackContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 32,
+    margin: 16,
+    borderRadius: 16,
   },
-  errorIconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  errorTitle: {
-    fontSize: 18,
+  fallbackTitle: {
+    fontSize: 20,
     fontWeight: "600",
+    marginTop: 16,
     marginBottom: 8,
-    textAlign: "center",
   },
-  errorMessage: {
+  fallbackText: {
     fontSize: 14,
     textAlign: "center",
-    lineHeight: 20,
     marginBottom: 24,
   },
-  errorButton: {
+  openButton: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 24,
@@ -167,8 +160,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 8,
   },
-  errorButtonText: {
-    color: "#FFFFFF",
+  openButtonText: {
+    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },

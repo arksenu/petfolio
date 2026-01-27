@@ -26,7 +26,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
 import { formatDate, DOCUMENT_CATEGORIES } from "@/shared/pet-types";
-import { PdfViewer } from "@/components/pdf-viewer";
+import { PDFViewer } from "@/components/pdf-viewer";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -159,9 +159,9 @@ export default function ViewDocumentScreen() {
   const renderPdfViewer = () => {
     return (
       <View style={styles.pdfContainer}>
-        <PdfViewer 
+        <PDFViewer 
           uri={document.fileUri} 
-          onShare={handleShare}
+          onError={() => setImageError(true)}
         />
       </View>
     );

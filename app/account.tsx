@@ -16,26 +16,37 @@ export default function AccountScreen() {
     router.back();
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
 
-    Alert.alert(
-      "Sign Out",
-      "Are you sure you want to sign out? Your local data will remain on this device.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Sign Out",
-          style: "destructive",
-          onPress: async () => {
-            await logout();
-            router.replace("/(tabs)");
+    // Use window.confirm for web platform since Alert.alert doesn't work on web
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(
+        "Are you sure you want to sign out? Your local data will remain on this device."
+      );
+      if (confirmed) {
+        await logout();
+        router.replace("/(tabs)");
+      }
+    } else {
+      Alert.alert(
+        "Sign Out",
+        "Are you sure you want to sign out? Your local data will remain on this device.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Sign Out",
+            style: "destructive",
+            onPress: async () => {
+              await logout();
+              router.replace("/(tabs)");
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   if (loading) {
