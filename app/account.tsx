@@ -1,16 +1,21 @@
-import { Text, View, TouchableOpacity, StyleSheet, Platform, Alert, ActivityIndicator } from "react-native";
+import { Text, View, TouchableOpacity, StyleSheet, Platform, Alert, ActivityIndicator, Modal } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
+import { useState } from "react";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/hooks/use-auth";
+import { usePetStore } from "@/lib/pet-store";
 
 export default function AccountScreen() {
   const router = useRouter();
   const colors = useColors();
   const { user, loading, isAuthenticated, logout } = useAuth();
+  const { clearAllData } = usePetStore();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleClose = () => {
     router.back();
@@ -20,32 +25,22 @@ export default function AccountScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+    setShowLogoutModal(true);
+  };
 
-    // Use window.confirm for web platform since Alert.alert doesn't work on web
-    if (Platform.OS === "web") {
-      const confirmed = window.confirm(
-        "Are you sure you want to sign out? Your local data will remain on this device."
-      );
-      if (confirmed) {
-        await logout();
-        router.replace("/(tabs)");
+  const performLogout = async (clearData: boolean) => {
+    setIsLoggingOut(true);
+    try {
+      if (clearData) {
+        await clearAllData();
       }
-    } else {
-      Alert.alert(
-        "Sign Out",
-        "Are you sure you want to sign out? Your local data will remain on this device.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Sign Out",
-            style: "destructive",
-            onPress: async () => {
-              await logout();
-              router.replace("/(tabs)");
-            },
-          },
-        ]
-      );
+      await logout();
+      setShowLogoutModal(false);
+      router.replace("/(tabs)");
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
@@ -173,6 +168,61 @@ export default function AccountScreen() {
           <Text style={[styles.logoutButtonText, { color: colors.error }]}>Sign Out</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Logout Confirmation Modal */}
+      <Modal
+        visible={showLogoutModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !isLoggingOut && setShowLogoutModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Sign Out</Text>
+            <Text style={[styles.modalMessage, { color: colors.muted }]}>
+              What would you like to do with your local data?
+            </Text>
+
+            {isLoggingOut ? (
+              <View style={styles.modalLoading}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[styles.modalLoadingText, { color: colors.muted }]}>
+                  Signing out...
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  onPress={() => performLogout(false)}
+                  style={[styles.modalButton, { backgroundColor: colors.primary }]}
+                >
+                  <Text style={styles.modalButtonText}>Keep Local Data</Text>
+                  <Text style={[styles.modalButtonSubtext, { color: "rgba(255,255,255,0.7)" }]}>
+                    Data stays on this device
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => performLogout(true)}
+                  style={[styles.modalButton, styles.modalButtonDestructive, { backgroundColor: colors.error }]}
+                >
+                  <Text style={styles.modalButtonText}>Clear Local Data</Text>
+                  <Text style={[styles.modalButtonSubtext, { color: "rgba(255,255,255,0.7)" }]}>
+                    Remove all data from device
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setShowLogoutModal(false)}
+                  style={[styles.modalCancelButton, { borderColor: colors.border }]}
+                >
+                  <Text style={[styles.modalCancelText, { color: colors.foreground }]}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -322,5 +372,69 @@ const styles = StyleSheet.create({
   logoutButtonText: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    width: "100%",
+    maxWidth: 340,
+    borderRadius: 20,
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  modalMessage: {
+    fontSize: 15,
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  modalLoading: {
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 20,
+  },
+  modalLoadingText: {
+    fontSize: 14,
+  },
+  modalButtons: {
+    gap: 12,
+  },
+  modalButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  modalButtonDestructive: {},
+  modalButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalButtonSubtext: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  modalCancelButton: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: "500",
   },
 });

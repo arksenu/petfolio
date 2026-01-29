@@ -69,7 +69,8 @@ type PetAction =
   | { type: 'UPDATE_MEDICATION'; payload: Medication }
   | { type: 'DELETE_MEDICATION'; payload: string }
   | { type: 'LOG_DOSE'; payload: { medicationId: string; doseLog: DoseLog } }
-  | { type: 'MERGE_CLOUD_DATA'; payload: Partial<PetState> };
+  | { type: 'MERGE_CLOUD_DATA'; payload: Partial<PetState> }
+  | { type: 'CLEAR_ALL_DATA' };
 
 // Initial state
 const initialState: PetState = {
@@ -99,6 +100,8 @@ function petReducer(state: PetState, action: PetAction): PetState {
     case 'MERGE_CLOUD_DATA':
       // Merge cloud data with local data, preferring newer entries
       return { ...state, ...action.payload, isSyncing: false };
+    case 'CLEAR_ALL_DATA':
+      return { ...initialState, isLoading: false, isInitialized: true };
     case 'ADD_PET':
       return { ...state, pets: [...state.pets, action.payload] };
     case 'UPDATE_PET':
@@ -214,6 +217,8 @@ interface PetContextType {
   logDose: (medicationId: string, skipped?: boolean, notes?: string) => Promise<void>;
   // Sync actions
   syncWithCloud: () => Promise<void>;
+  // Clear all local data
+  clearAllData: () => Promise<void>;
 }
 
 const PetContext = createContext<PetContextType | undefined>(undefined);
@@ -841,6 +846,27 @@ export function PetProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Clear all local data
+  async function clearAllData(): Promise<void> {
+    try {
+      // Clear all AsyncStorage keys
+      await Promise.all([
+        AsyncStorage.removeItem(STORAGE_KEYS.PETS),
+        AsyncStorage.removeItem(STORAGE_KEYS.DOCUMENTS),
+        AsyncStorage.removeItem(STORAGE_KEYS.VACCINATIONS),
+        AsyncStorage.removeItem(STORAGE_KEYS.REMINDERS),
+        AsyncStorage.removeItem(STORAGE_KEYS.WEIGHT_HISTORY),
+        AsyncStorage.removeItem(STORAGE_KEYS.MEDICATIONS),
+        AsyncStorage.removeItem(STORAGE_KEYS.LAST_SYNC),
+      ]);
+      
+      // Reset state to initial
+      dispatch({ type: 'CLEAR_ALL_DATA' });
+    } catch (error) {
+      console.error('Failed to clear all data:', error);
+    }
+  }
+
   const value: PetContextType = {
     state,
     addPet,
@@ -871,6 +897,7 @@ export function PetProvider({ children }: { children: ReactNode }) {
     getMedicationsForPet,
     logDose,
     syncWithCloud,
+    clearAllData,
   };
 
   return <PetContext.Provider value={value}>{children}</PetContext.Provider>;

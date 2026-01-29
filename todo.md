@@ -124,3 +124,12 @@
 - [x] Fix Sign Out button not working on desktop (use window.confirm for web platform)
 - [x] Handle Expo Go OAuth redirect_uri limitation gracefully (show warning message)
 - [x] Fix PDF viewer to work on all platforms (web, iOS, Android)
+
+## Bug Fixes (v2.0)
+- [x] Fix sign out to ask user whether to keep or clear local data
+- [x] Fix mobile web sign in (page unavailable error) - dynamic frontend URL from request hostname
+- [x] Investigate Expo Go sign in possibility - NOT POSSIBLE: OAuth provider rejects 'exp://' scheme used by Expo Go. Users must use web preview or build standalone app.
+- [ ] Fix delete pet button not working (desktop/mobile web)
+- [ ] Fix delete document/vaccination/medication/reminder buttons not working
+- [ ] Fix PDF viewer on web (WebView not supported on web platform)
+- [ ] Fix Log Dose button not working for medications
