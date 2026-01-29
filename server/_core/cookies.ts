@@ -21,7 +21,7 @@ function isSecureRequest(req: Request) {
 
 /**
  * Extract parent domain for cookie sharing across subdomains.
- * e.g., "3000-xxx.manuspre.computer" -> ".manuspre.computer"
+ * e.g., "3000-xxx.sg1.manus.computer" -> ".sg1.manus.computer"
  * This allows cookies set by 3000-xxx to be read by 8081-xxx
  */
 function getParentDomain(hostname: string): string | undefined {
@@ -33,13 +33,21 @@ function getParentDomain(hostname: string): string | undefined {
   // Split hostname into parts
   const parts = hostname.split(".");
 
-  // Need at least 3 parts for a subdomain (e.g., "3000-xxx.manuspre.computer")
-  // For "manuspre.computer", we can't set a parent domain
+  // Need at least 3 parts for a subdomain
   if (parts.length < 3) {
     return undefined;
   }
 
-  // Return parent domain with leading dot (e.g., ".manuspre.computer")
+  // For manus.computer domains (e.g., "3000-xxx.sg1.manus.computer")
+  // We need to include the region subdomain for proper cookie sharing
+  // Return parent domain excluding the port-prefixed subdomain
+  // e.g., "3000-xxx.sg1.manus.computer" -> ".sg1.manus.computer"
+  if (parts.length >= 4 && parts[parts.length - 2] === "manus" && parts[parts.length - 1] === "computer") {
+    // Include region subdomain: .sg1.manus.computer
+    return "." + parts.slice(-3).join(".");
+  }
+
+  // Default: return parent domain with leading dot (e.g., ".manuspre.computer")
   // This allows cookie to be shared across all subdomains
   return "." + parts.slice(-2).join(".");
 }

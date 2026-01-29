@@ -134,3 +134,4 @@
 - [ ] Fix PDF viewer on web (WebView not supported on web platform)
 - [ ] Fix Log Dose button not working for medications
 - [x] Fix cloud sync restore - pet data not restored after sign out (clear data) and sign back in
+- [x] Fix mobile web sign-in session not recognized after OAuth callback (cookie domain now includes region subdomain)
