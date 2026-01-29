@@ -26,9 +26,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
 
-      // Web platform: use cookie-based auth, fetch user from API
+      // Web platform: check for localStorage token first (mobile web), then try cookie-based auth
       if (Platform.OS === "web") {
-        console.log("[AuthContext] Web platform: fetching user from API...");
+        console.log("[AuthContext] Web platform: checking for stored token...");
+        
+        // Check if we have a token in localStorage (mobile web fallback)
+        const storedToken = await Auth.getSessionToken();
+        if (storedToken) {
+          console.log("[AuthContext] Web: found token in localStorage, fetching user...");
+        } else {
+          console.log("[AuthContext] Web: no localStorage token, trying cookie-based auth...");
+        }
+        
         const apiUser = await Api.getMe();
         console.log("[AuthContext] API user response:", apiUser);
 

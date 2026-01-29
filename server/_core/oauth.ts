@@ -61,6 +61,14 @@ function buildUserResponse(
   };
 }
 
+/**
+ * Detect if the request is from a mobile browser based on User-Agent
+ */
+function isMobileUserAgent(req: Request): boolean {
+  const ua = (req.headers["user-agent"] || "").toLowerCase();
+  return /mobile|android|iphone|ipad|ipod|webos|blackberry|opera mini|iemobile/i.test(ua);
+}
+
 export function registerOAuthRoutes(app: Express) {
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
@@ -74,21 +82,26 @@ export function registerOAuthRoutes(app: Express) {
     try {
       const tokenResponse = await sdk.exchangeCodeForToken(code, state);
       const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
-      await syncUser(userInfo);
+      const user = await syncUser(userInfo);
       const sessionToken = await sdk.createSessionToken(userInfo.openId!, {
         name: userInfo.name || "",
         expiresInMs: ONE_YEAR_MS,
       });
 
       const cookieOptions = getSessionCookieOptions(req);
+      const isMobile = isMobileUserAgent(req);
+      
       console.log('[OAuth] Callback - Setting cookie with options:', { 
         hostname: req.hostname, 
         domain: cookieOptions.domain, 
         secure: cookieOptions.secure,
         sameSite: cookieOptions.sameSite,
         cookieName: COOKIE_NAME,
-        tokenLength: sessionToken.length 
+        tokenLength: sessionToken.length,
+        isMobile,
       });
+      
+      // Always set the cookie (works for desktop browsers)
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
       // Redirect to the frontend URL (Expo web on port 8081)
@@ -108,7 +121,21 @@ export function registerOAuthRoutes(app: Express) {
           frontendUrl = 'http://localhost:8081';
         }
       }
-      res.redirect(302, frontendUrl);
+      
+      // For mobile browsers, include the session token and user info in the redirect URL
+      // This bypasses third-party cookie blocking (Safari ITP, Chrome SameSite restrictions)
+      if (isMobile) {
+        const userJson = JSON.stringify(buildUserResponse(user));
+        const userBase64 = Buffer.from(userJson).toString('base64');
+        const redirectUrl = new URL('/oauth/callback', frontendUrl);
+        redirectUrl.searchParams.set('sessionToken', sessionToken);
+        redirectUrl.searchParams.set('user', userBase64);
+        console.log('[OAuth] Mobile browser detected, redirecting with token in URL');
+        res.redirect(302, redirectUrl.toString());
+      } else {
+        // Desktop browsers: rely on cookies
+        res.redirect(302, frontendUrl);
+      }
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
       res.status(500).json({ error: "OAuth callback failed" });

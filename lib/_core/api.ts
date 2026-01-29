@@ -13,12 +13,11 @@ export async function apiCall<T>(endpoint: string, options: RequestInit = {}): P
     ...((options.headers as Record<string, string>) || {}),
   };
 
-  // Determine the auth method:
-  // - Native platform: use stored session token as Bearer auth
-  // - Web (including iframe): use cookie-based auth (browser handles automatically)
-  //   Cookie is set on backend domain via POST /api/auth/session after receiving token via postMessage
+  // Check for stored session token (works for both native and web with localStorage fallback)
+  const sessionToken = await Auth.getSessionToken();
+  
   if (Platform.OS !== "web") {
-    const sessionToken = await Auth.getSessionToken();
+    // Native platform: use stored session token as Bearer auth
     console.log("[API] apiCall:", {
       endpoint,
       hasToken: !!sessionToken,
@@ -29,7 +28,17 @@ export async function apiCall<T>(endpoint: string, options: RequestInit = {}): P
       console.log("[API] Authorization header added");
     }
   } else {
-    console.log("[API] apiCall:", { endpoint, platform: "web", method: options.method || "GET" });
+    // Web platform: use token from localStorage if available, otherwise rely on cookies
+    console.log("[API] apiCall:", { 
+      endpoint, 
+      platform: "web", 
+      method: options.method || "GET",
+      hasLocalStorageToken: !!sessionToken 
+    });
+    if (sessionToken) {
+      headers["Authorization"] = `Bearer ${sessionToken}`;
+      console.log("[API] Web: Authorization header added from localStorage token");
+    }
   }
 
   const baseUrl = getApiBaseUrl();
@@ -123,7 +132,7 @@ export async function logout(): Promise<void> {
   });
 }
 
-// Get current authenticated user (web uses cookie-based auth)
+// Get current authenticated user (web uses cookie-based auth or Bearer token)
 export async function getMe(): Promise<{
   id: number;
   openId: string;
