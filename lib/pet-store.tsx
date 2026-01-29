@@ -228,7 +228,10 @@ export function PetProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(petReducer, initialState);
   const { isAuthenticated, user } = useAuth();
   
-  // tRPC mutations for cloud sync
+  // tRPC queries and mutations for cloud sync
+  const syncDataQuery = trpc.sync.getData.useQuery(undefined, {
+    enabled: false, // Only fetch manually
+  });
   const upsertPetMutation = trpc.pets.upsert.useMutation();
   const deletePetMutation = trpc.pets.delete.useMutation();
   const upsertDocMutation = trpc.documents.upsert.useMutation();
@@ -244,6 +247,115 @@ export function PetProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Restore data from cloud when user signs in and local data is empty
+  useEffect(() => {
+    if (isAuthenticated && state.isInitialized && state.pets.length === 0 && !state.isSyncing) {
+      restoreFromCloud();
+    }
+  }, [isAuthenticated, state.isInitialized, state.pets.length]);
+
+  // Restore data from cloud
+  async function restoreFromCloud() {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: 'SET_SYNCING', payload: true });
+    
+    try {
+      const result = await syncDataQuery.refetch();
+      const cloudData = result.data;
+      
+      if (cloudData && (cloudData.pets.length > 0 || cloudData.documents.length > 0)) {
+        // Transform cloud data to local format
+        const pets: Pet[] = cloudData.pets.map((p: any) => ({
+          id: p.localId,
+          name: p.name,
+          species: p.species,
+          breed: p.breed || undefined,
+          dateOfBirth: p.dateOfBirth ? new Date(p.dateOfBirth).toISOString() : undefined,
+          weight: p.weight ? parseFloat(p.weight) : undefined,
+          weightUnit: p.weightUnit || 'lb',
+          photoUri: p.photoUri || undefined,
+          microchipNumber: p.microchipNumber || undefined,
+          createdAt: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
+          updatedAt: p.updatedAt ? new Date(p.updatedAt).toISOString() : new Date().toISOString(),
+        }));
+        
+        // Create a map of cloud pet IDs to local IDs
+        const petIdMap = new Map<number, string>();
+        cloudData.pets.forEach((p: any) => {
+          petIdMap.set(p.id, p.localId);
+        });
+        
+        const documents: PetDocument[] = cloudData.documents.map((d: any) => ({
+          id: d.localId,
+          petId: petIdMap.get(d.petId) || d.localId,
+          title: d.title,
+          category: d.category,
+          date: d.date ? new Date(d.date).toISOString() : new Date().toISOString(),
+          fileUri: d.fileUri || undefined,
+          fileType: d.fileType || 'image',
+          fileName: d.fileName || undefined,
+          notes: d.notes || undefined,
+          createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
+          updatedAt: d.updatedAt ? new Date(d.updatedAt).toISOString() : new Date().toISOString(),
+        }));
+        
+        const vaccinations: Vaccination[] = cloudData.vaccinations.map((v: any) => ({
+          id: v.localId,
+          petId: petIdMap.get(v.petId) || v.localId,
+          name: v.name,
+          dateAdministered: v.dateAdministered ? new Date(v.dateAdministered).toISOString() : new Date().toISOString(),
+          expirationDate: v.expirationDate ? new Date(v.expirationDate).toISOString() : undefined,
+          veterinarian: v.veterinarian || undefined,
+          notes: v.notes || undefined,
+          createdAt: v.createdAt ? new Date(v.createdAt).toISOString() : new Date().toISOString(),
+        }));
+        
+        const reminders: Reminder[] = cloudData.reminders.map((r: any) => ({
+          id: r.localId,
+          petId: petIdMap.get(r.petId) || r.localId,
+          title: r.title,
+          date: r.date ? new Date(r.date).toISOString() : new Date().toISOString(),
+          time: r.time || undefined,
+          isEnabled: r.isEnabled ?? true,
+          notificationId: r.notificationId || undefined,
+          createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : new Date().toISOString(),
+        }));
+        
+        const weightHistory: WeightEntry[] = cloudData.weightHistory.map((w: any) => ({
+          id: w.localId,
+          petId: petIdMap.get(w.petId) || w.localId,
+          weight: w.weight ? parseFloat(w.weight) : 0,
+          weightUnit: w.weightUnit || 'lb',
+          date: w.date ? new Date(w.date).toISOString() : new Date().toISOString(),
+          notes: w.notes || undefined,
+          createdAt: w.createdAt ? new Date(w.createdAt).toISOString() : new Date().toISOString(),
+        }));
+        
+        // Merge cloud data into local state
+        dispatch({
+          type: 'MERGE_CLOUD_DATA',
+          payload: {
+            pets,
+            documents,
+            vaccinations,
+            reminders,
+            weightHistory,
+          },
+        });
+        
+        const syncTime = new Date().toISOString();
+        await AsyncStorage.setItem(STORAGE_KEYS.LAST_SYNC, syncTime);
+        dispatch({ type: 'SET_LAST_SYNC', payload: syncTime });
+      }
+      
+      dispatch({ type: 'SET_SYNCING', payload: false });
+    } catch (error) {
+      console.error('Failed to restore from cloud:', error);
+      dispatch({ type: 'SET_SYNCING', payload: false });
+    }
+  }
 
   // Save data to AsyncStorage whenever state changes
   useEffect(() => {

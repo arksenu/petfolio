@@ -1,0 +1,22 @@
+{
+  "query": "SELECT u.id, u.name, u.email, COUNT(p.id) as pet_count \nFROM users u \nLEFT JOIN pets p ON p.userId = u.id \nGROUP BY u.id, u.name, u.email \nORDER BY u.id DESC \nLIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user pKjA5SMDXuoB77s.root --database EAx6gLvU46tT7DLQqEvWYm --execute SELECT u.id, u.name, u.email, COUNT(p.id) as pet_count \nFROM users u \nLEFT JOIN pets p ON p.userId = u.id \nGROUP BY u.id, u.name, u.email \nORDER BY u.id DESC \nLIMIT 10;",
+  "rows": [
+    {
+      "id": "210004",
+      "name": "dario mazhara",
+      "email": "kolomanjo@gmail.com",
+      "pet_count": "1"
+    },
+    {
+      "id": "1",
+      "name": "Dario Mazhara",
+      "email": "dariomazhara87@gmail.com",
+      "pet_count": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\temail\tpet_count\n210004\tdario mazhara\tkolomanjo@gmail.com\t1\n1\tDario Mazhara\tdariomazhara87@gmail.com\t1\n",
+  "stderr": "",
+  "execution_time_ms": 1515
+}

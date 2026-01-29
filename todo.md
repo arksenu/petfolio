@@ -133,3 +133,4 @@
 - [ ] Fix delete document/vaccination/medication/reminder buttons not working
 - [ ] Fix PDF viewer on web (WebView not supported on web platform)
 - [ ] Fix Log Dose button not working for medications
+- [x] Fix cloud sync restore - pet data not restored after sign out (clear data) and sign back in
