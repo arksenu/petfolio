@@ -81,6 +81,14 @@ export function registerOAuthRoutes(app: Express) {
       });
 
       const cookieOptions = getSessionCookieOptions(req);
+      console.log('[OAuth] Callback - Setting cookie with options:', { 
+        hostname: req.hostname, 
+        domain: cookieOptions.domain, 
+        secure: cookieOptions.secure,
+        sameSite: cookieOptions.sameSite,
+        cookieName: COOKIE_NAME,
+        tokenLength: sessionToken.length 
+      });
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
       // Redirect to the frontend URL (Expo web on port 8081)

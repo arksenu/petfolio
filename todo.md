@@ -135,3 +135,4 @@
 - [ ] Fix Log Dose button not working for medications
 - [x] Fix cloud sync restore - pet data not restored after sign out (clear data) and sign back in
 - [x] Fix mobile web sign-in session not recognized after OAuth callback (cookie domain now includes region subdomain)
+- [ ] Fix mobile Safari sign-in - session cookie not stored/read after OAuth (SameSite/third-party cookie issue)
