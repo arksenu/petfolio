@@ -15,6 +15,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useConcierge } from "@/lib/concierge-store";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import { uploadAndTranscribeAudio } from "@/lib/voice-upload";
+import { useAuth } from "@/hooks/use-auth";
 import type { ConciergeMessage } from "@/shared/pet-types";
 
 function formatTime(iso: string): string {
@@ -105,12 +108,19 @@ export default function RequestThreadScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { state, addMessage, getMessages } = useConcierge();
+  const { user } = useAuth();
 
   const [text, setText] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState(0);
-  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+
+  const {
+    isRecording,
+    durationSeconds,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+  } = useVoiceRecorder();
 
   const request = state.requests.find((r) => r.id === id);
   const messages = getMessages(id || "");
@@ -148,39 +158,41 @@ export default function RequestThreadScreen() {
     setText("");
   };
 
-  // Voice recording simulation (actual recording requires native module)
-  const startRecording = () => {
-    setIsRecording(true);
-    setRecordingDuration(0);
-    recordingTimerRef.current = setInterval(() => {
-      setRecordingDuration((d) => d + 1);
-    }, 1000);
-  };
+  const handleVoiceStop = async () => {
+    const result = await stopRecording();
+    if (!result || result.durationSeconds < 1 || !id) return;
 
-  const stopRecording = () => {
-    setIsRecording(false);
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
-    if (recordingDuration > 0 && id) {
-      // For now, add as text with voice indicator
+    if (user) {
+      setIsProcessingVoice(true);
+      try {
+        const { audioUrl, transcribedText } = await uploadAndTranscribeAudio(
+          result.uri,
+          result.mimeType,
+          result.durationSeconds
+        );
+        addMessage(id, transcribedText, "voice", audioUrl, result.durationSeconds);
+      } catch (e: any) {
+        console.error("[RequestThread] Voice processing error:", e);
+        addMessage(
+          id,
+          `[Voice message - ${result.durationSeconds}s] (transcription failed)`,
+          "voice",
+          undefined,
+          result.durationSeconds
+        );
+      } finally {
+        setIsProcessingVoice(false);
+      }
+    } else {
       addMessage(
         id,
-        `[Voice message - ${recordingDuration}s]`,
+        `[Voice message - ${result.durationSeconds}s]`,
         "voice",
         undefined,
-        recordingDuration
+        result.durationSeconds
       );
     }
-    setRecordingDuration(0);
   };
-
-  useEffect(() => {
-    return () => {
-      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
-    };
-  }, []);
 
   if (!request) {
     return (
@@ -207,7 +219,10 @@ export default function RequestThreadScreen() {
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border, paddingTop: insets.top + 8 }]}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (isRecording) cancelRecording();
+            router.back();
+          }}
           style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
         >
           <IconSymbol name="chevron.left" size={24} color={colors.primary} />
@@ -268,7 +283,26 @@ export default function RequestThreadScreen() {
           <View style={[styles.recordingBar, { backgroundColor: colors.error + "15" }]}>
             <View style={[styles.recordingDot, { backgroundColor: colors.error }]} />
             <Text style={[styles.recordingText, { color: colors.error }]}>
-              Recording... {recordingDuration}s
+              Recording... {durationSeconds}s
+            </Text>
+            <Pressable
+              onPress={cancelRecording}
+              style={({ pressed }) => [
+                styles.cancelRecordButton,
+                { opacity: pressed ? 0.6 : 1 },
+              ]}
+            >
+              <Text style={[styles.cancelRecordText, { color: colors.muted }]}>Cancel</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Processing voice indicator */}
+        {isProcessingVoice && (
+          <View style={[styles.recordingBar, { backgroundColor: colors.primary + "10" }]}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.recordingText, { color: colors.primary }]}>
+              Transcribing...
             </Text>
           </View>
         )}
@@ -286,12 +320,13 @@ export default function RequestThreadScreen() {
         >
           {/* Voice button */}
           <Pressable
-            onPress={isRecording ? stopRecording : startRecording}
+            onPress={isRecording ? handleVoiceStop : startRecording}
+            disabled={isProcessingVoice}
             style={({ pressed }) => [
               styles.iconButton,
               {
                 backgroundColor: isRecording ? colors.error + "20" : "transparent",
-                opacity: pressed ? 0.6 : 1,
+                opacity: pressed ? 0.6 : isProcessingVoice ? 0.3 : 1,
               },
             ]}
           >
@@ -319,12 +354,13 @@ export default function RequestThreadScreen() {
             multiline
             maxLength={2000}
             returnKeyType="default"
+            editable={!isRecording && !isProcessingVoice}
           />
 
           {/* Send button */}
           <Pressable
             onPress={handleSend}
-            disabled={!text.trim()}
+            disabled={!text.trim() || isRecording || isProcessingVoice}
             style={({ pressed }) => [
               styles.sendButton,
               {
@@ -443,6 +479,15 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   recordingText: {
+    fontSize: 14,
+    fontWeight: "500",
+    flex: 1,
+  },
+  cancelRecordButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  cancelRecordText: {
     fontSize: 14,
     fontWeight: "500",
   },

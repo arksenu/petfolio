@@ -1,4 +1,4 @@
-import { eq, and, like, or, desc } from "drizzle-orm";
+import { eq, and, like, or, desc, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, users,
@@ -453,6 +453,100 @@ export async function addMessage(userId: number, requestLocalId: string, data: O
     .where(eq(conciergeRequests.id, request.id));
   
   return Number(result[0].insertId);
+}
+
+// ==================== ADMIN CONCIERGE FUNCTIONS ====================
+
+export async function getAllPendingRequests(): Promise<Array<ConciergeRequest & { userName: string | null; userEmail: string | null }>> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select({
+      id: conciergeRequests.id,
+      localId: conciergeRequests.localId,
+      userId: conciergeRequests.userId,
+      petLocalId: conciergeRequests.petLocalId,
+      petName: conciergeRequests.petName,
+      status: conciergeRequests.status,
+      preview: conciergeRequests.preview,
+      messageCount: conciergeRequests.messageCount,
+      createdAt: conciergeRequests.createdAt,
+      updatedAt: conciergeRequests.updatedAt,
+      userName: users.name,
+      userEmail: users.email,
+    })
+    .from(conciergeRequests)
+    .innerJoin(users, eq(conciergeRequests.userId, users.id))
+    .where(ne(conciergeRequests.status, 'resolved'))
+    .orderBy(desc(conciergeRequests.updatedAt));
+
+  return rows;
+}
+
+export async function getRequestById(requestId: number): Promise<ConciergeRequest | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(conciergeRequests)
+    .where(eq(conciergeRequests.id, requestId))
+    .limit(1);
+  return result[0];
+}
+
+export async function getMessagesByRequestId(requestId: number): Promise<ConciergeMessage[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db.select().from(conciergeMessages)
+    .where(eq(conciergeMessages.requestId, requestId))
+    .orderBy(conciergeMessages.createdAt);
+}
+
+export async function addAdminMessage(
+  requestId: number,
+  content: string,
+  newStatus?: string,
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error('Database not available');
+
+  const request = await getRequestById(requestId);
+  if (!request) throw new Error('Request not found');
+
+  const localId = `admin-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+  const result = await db.insert(conciergeMessages).values({
+    localId,
+    requestId,
+    userId: request.userId,
+    senderType: 'concierge',
+    messageType: 'text',
+    content,
+  });
+
+  const updates: Record<string, unknown> = {
+    preview: content.substring(0, 200),
+    messageCount: request.messageCount + 1,
+  };
+  if (newStatus) {
+    updates.status = newStatus;
+  }
+
+  await db.update(conciergeRequests)
+    .set(updates)
+    .where(eq(conciergeRequests.id, requestId));
+
+  return Number(result[0].insertId);
+}
+
+export async function adminUpdateRequestStatus(requestId: number, status: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error('Database not available');
+
+  await db.update(conciergeRequests)
+    .set({ status })
+    .where(eq(conciergeRequests.id, requestId));
 }
 
 // ==================== VET PROVIDER FUNCTIONS ====================

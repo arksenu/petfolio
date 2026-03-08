@@ -2,7 +2,7 @@ import { z } from "zod";
 import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import { storagePut } from "./storage";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -312,6 +312,48 @@ export const appRouter = router({
       .input(z.object({ localId: z.string() }))
       .mutation(({ ctx, input }) => {
         return db.deleteProvider(ctx.user.id, input.localId);
+      }),
+  }),
+
+  // Admin concierge management endpoints
+  admin: router({
+    // List all non-resolved requests with user info
+    listRequests: adminProcedure.query(() => {
+      return db.getAllPendingRequests();
+    }),
+
+    // Get messages for a specific request by DB id
+    getMessages: adminProcedure
+      .input(z.object({ requestId: z.number() }))
+      .query(({ input }) => {
+        return db.getMessagesByRequestId(input.requestId);
+      }),
+
+    // Send a response to a request (creates a concierge message)
+    respond: adminProcedure
+      .input(z.object({
+        requestId: z.number(),
+        content: z.string().min(1),
+        newStatus: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const messageId = await db.addAdminMessage(
+          input.requestId,
+          input.content,
+          input.newStatus,
+        );
+        return { messageId };
+      }),
+
+    // Update request status
+    updateStatus: adminProcedure
+      .input(z.object({
+        requestId: z.number(),
+        status: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        await db.adminUpdateRequestStatus(input.requestId, input.status);
+        return { success: true };
       }),
   }),
 

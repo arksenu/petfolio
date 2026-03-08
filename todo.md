@@ -150,3 +150,11 @@
 - [x] Add Vet/Provider association on pet profile
 - [x] Add provider management (add/edit/delete)
 - [x] Fix voice recording button not visible - added Type/Voice toggle to new request screen
+
+## Audio Recording & Admin API (v3.2)
+- [x] Wire up actual expo-audio recording in new request screen
+- [x] Wire up actual expo-audio recording in chat thread screen
+- [x] Upload audio recordings to S3
+- [x] Integrate server-side voice transcription (voiceTranscription.ts)
+- [x] Build admin API endpoints (list pending requests, respond to requests, update status)
+- [x] Trigger push notification when admin responds (via notifyOwner + local notification on client sync)

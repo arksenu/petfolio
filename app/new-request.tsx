@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  ActivityIndicator,
 } from "react-native";
 import { Pressable } from "react-native";
 import { useRouter } from "expo-router";
@@ -16,6 +17,9 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useConcierge } from "@/lib/concierge-store";
 import { usePetStore } from "@/lib/pet-store";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import { uploadAndTranscribeAudio } from "@/lib/voice-upload";
+import { useAuth } from "@/hooks/use-auth";
 
 type InputMode = "text" | "voice";
 
@@ -24,15 +28,24 @@ export default function NewRequestScreen() {
   const router = useRouter();
   const { createRequest } = useConcierge();
   const { state: petState } = usePetStore();
+  const { user } = useAuth();
 
   const [message, setMessage] = useState("");
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
   const [inputMode, setInputMode] = useState<InputMode>("text");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState("");
 
-  // Voice recording state
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState(0);
-  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const {
+    isRecording,
+    durationSeconds,
+    permissionGranted,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+  } = useVoiceRecorder();
+
+  // Pulse animation for recording indicator
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const pets: Array<{ id: string; name: string }> = petState.pets || [];
@@ -41,7 +54,6 @@ export default function NewRequestScreen() {
     [pets, selectedPetId]
   );
 
-  // Pulse animation for recording indicator
   useEffect(() => {
     if (isRecording) {
       const pulse = Animated.loop(
@@ -65,13 +77,6 @@ export default function NewRequestScreen() {
     }
   }, [isRecording, pulseAnim]);
 
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
-    };
-  }, []);
-
   const handleSubmit = () => {
     const trimmed = message.trim();
     if (!trimmed) return;
@@ -89,44 +94,68 @@ export default function NewRequestScreen() {
     }, 300);
   };
 
-  const startRecording = () => {
-    setIsRecording(true);
-    setRecordingDuration(0);
-    recordingTimerRef.current = setInterval(() => {
-      setRecordingDuration((d) => d + 1);
-    }, 1000);
-  };
+  const handleStopAndSend = async () => {
+    const result = await stopRecording();
+    if (!result || result.durationSeconds < 1) return;
 
-  const stopRecording = () => {
-    setIsRecording(false);
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
-    if (recordingDuration > 0) {
-      const voiceMessage = `[Voice message - ${recordingDuration}s]`;
+    // If user is signed in, upload and transcribe
+    if (user) {
+      setIsProcessing(true);
+      setProcessingStatus("Uploading audio...");
+      try {
+        setProcessingStatus("Transcribing...");
+        const { audioUrl, transcribedText } = await uploadAndTranscribeAudio(
+          result.uri,
+          result.mimeType,
+          result.durationSeconds
+        );
+
+        const request = createRequest(
+          selectedPetId || undefined,
+          selectedPet?.name || undefined,
+          transcribedText,
+          "voice",
+          audioUrl,
+          result.durationSeconds
+        );
+
+        setIsProcessing(false);
+        router.dismiss();
+        setTimeout(() => {
+          router.push(`/request-thread/${request.id}` as any);
+        }, 300);
+      } catch (e: any) {
+        console.error("[NewRequest] Voice processing error:", e);
+        setIsProcessing(false);
+        // Fallback: create request with placeholder text
+        const request = createRequest(
+          selectedPetId || undefined,
+          selectedPet?.name || undefined,
+          `[Voice message - ${result.durationSeconds}s] (transcription failed)`,
+          "voice",
+          undefined,
+          result.durationSeconds
+        );
+        router.dismiss();
+        setTimeout(() => {
+          router.push(`/request-thread/${request.id}` as any);
+        }, 300);
+      }
+    } else {
+      // Not signed in — store locally with placeholder
       const request = createRequest(
         selectedPetId || undefined,
         selectedPet?.name || undefined,
-        voiceMessage,
-        "voice"
+        `[Voice message - ${result.durationSeconds}s] (sign in to enable transcription)`,
+        "voice",
+        undefined,
+        result.durationSeconds
       );
-
       router.dismiss();
       setTimeout(() => {
         router.push(`/request-thread/${request.id}` as any);
       }, 300);
     }
-    setRecordingDuration(0);
-  };
-
-  const cancelRecording = () => {
-    setIsRecording(false);
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
-    setRecordingDuration(0);
   };
 
   const formatDuration = (seconds: number) => {
@@ -144,7 +173,10 @@ export default function NewRequestScreen() {
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <Pressable
-            onPress={() => router.dismiss()}
+            onPress={() => {
+              if (isRecording) cancelRecording();
+              router.dismiss();
+            }}
             style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
           >
             <Text style={[styles.cancelText, { color: colors.primary }]}>Cancel</Text>
@@ -170,6 +202,16 @@ export default function NewRequestScreen() {
             <View style={{ width: 60 }} />
           )}
         </View>
+
+        {/* Processing overlay */}
+        {isProcessing && (
+          <View style={[styles.processingOverlay, { backgroundColor: colors.background + "F0" }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.processingText, { color: colors.foreground }]}>
+              {processingStatus}
+            </Text>
+          </View>
+        )}
 
         <ScrollView
           style={{ flex: 1 }}
@@ -227,7 +269,10 @@ export default function NewRequestScreen() {
             <Text style={[styles.sectionLabel, { color: colors.muted }]}>INPUT METHOD</Text>
             <View style={[styles.modeToggle, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Pressable
-                onPress={() => setInputMode("text")}
+                onPress={() => {
+                  if (isRecording) cancelRecording();
+                  setInputMode("text");
+                }}
                 style={({ pressed }) => [
                   styles.modeOption,
                   {
@@ -334,7 +379,19 @@ export default function NewRequestScreen() {
           {/* Voice Input Mode */}
           {inputMode === "voice" && (
             <View style={styles.voiceSection}>
-              {!isRecording ? (
+              {permissionGranted === false && (
+                <View style={styles.voicePrompt}>
+                  <IconSymbol name="mic.fill" size={48} color={colors.error} />
+                  <Text style={[styles.voicePromptText, { color: colors.error }]}>
+                    Microphone access denied
+                  </Text>
+                  <Text style={[styles.voiceHint, { color: colors.muted }]}>
+                    Enable microphone access in your device settings to use voice recording
+                  </Text>
+                </View>
+              )}
+
+              {permissionGranted !== false && !isRecording && (
                 <>
                   <View style={styles.voicePrompt}>
                     <IconSymbol name="mic.fill" size={48} color={colors.muted + "60"} />
@@ -360,7 +417,9 @@ export default function NewRequestScreen() {
                     <Text style={styles.recordButtonText}>Start Recording</Text>
                   </Pressable>
                 </>
-              ) : (
+              )}
+
+              {isRecording && (
                 <>
                   <View style={styles.recordingContainer}>
                     <Animated.View
@@ -375,7 +434,7 @@ export default function NewRequestScreen() {
                       <View style={[styles.recordingDotLarge, { backgroundColor: colors.error }]} />
                     </Animated.View>
                     <Text style={[styles.recordingDuration, { color: colors.foreground }]}>
-                      {formatDuration(recordingDuration)}
+                      {formatDuration(durationSeconds)}
                     </Text>
                     <Text style={[styles.recordingLabel, { color: colors.error }]}>
                       Recording...
@@ -399,7 +458,7 @@ export default function NewRequestScreen() {
                       </Text>
                     </Pressable>
                     <Pressable
-                      onPress={stopRecording}
+                      onPress={handleStopAndSend}
                       style={({ pressed }) => [
                         styles.recordActionButton,
                         {
@@ -592,5 +651,20 @@ const styles = StyleSheet.create({
   recordActionText: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  processingOverlay: {
+    position: "absolute",
+    top: 60,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+  },
+  processingText: {
+    fontSize: 16,
+    fontWeight: "500",
   },
 });
