@@ -15,6 +15,7 @@ export interface Pet {
   weightUnit?: WeightUnit;
   microchipNumber?: string;
   photoUri?: string;
+  vetProviders?: VetProvider[];
   createdAt: string;
   updatedAt: string;
 }
@@ -211,3 +212,61 @@ export function calculateAge(dateOfBirth: string): string {
 export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
+
+// ==================== CONCIERGE TYPES ====================
+
+export type RequestStatus = 'active' | 'pending' | 'in_progress' | 'resolved';
+export type MessageSenderType = 'user' | 'concierge';
+export type MessageType = 'text' | 'voice';
+export type ProviderType = 'primary_vet' | 'specialist' | 'emergency' | 'groomer' | 'boarding' | 'other';
+
+export interface ConciergeRequest {
+  id: string;
+  petId?: string; // local pet ID
+  petName?: string; // denormalized for display
+  status: RequestStatus;
+  createdAt: string;
+  updatedAt: string;
+  // First message preview (denormalized for list display)
+  preview?: string;
+  messageCount?: number;
+}
+
+export interface ConciergeMessage {
+  id: string;
+  requestId: string;
+  senderType: MessageSenderType;
+  messageType: MessageType;
+  content: string; // text content or transcription for voice
+  audioUrl?: string; // S3 URL for voice messages
+  audioDuration?: number; // seconds
+  createdAt: string;
+}
+
+export interface VetProvider {
+  id: string;
+  petId: string;
+  clinicName: string;
+  phone?: string;
+  address?: string;
+  providerType: ProviderType;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
+  { value: 'primary_vet', label: 'Primary Vet' },
+  { value: 'specialist', label: 'Specialist' },
+  { value: 'emergency', label: 'Emergency' },
+  { value: 'groomer', label: 'Groomer' },
+  { value: 'boarding', label: 'Boarding' },
+  { value: 'other', label: 'Other' },
+];
+
+export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
+  active: 'Active',
+  pending: 'Pending',
+  in_progress: 'In Progress',
+  resolved: 'Resolved',
+};

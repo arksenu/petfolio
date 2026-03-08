@@ -5,6 +5,8 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import { storagePut } from "./storage";
+import { transcribeAudio } from "./_core/voiceTranscription";
+import { TRPCError } from "@trpc/server";
 
 export const appRouter = router({
   system: systemRouter,
@@ -207,6 +209,109 @@ export const appRouter = router({
         const { url } = await storagePut(fileKey, buffer, fileType);
         
         return { url, key: fileKey };
+      }),
+  }),
+
+  // Concierge request routes
+  concierge: router({
+    // List all requests for the user
+    listRequests: protectedProcedure.query(({ ctx }) => {
+      return db.getUserRequests(ctx.user.id);
+    }),
+
+    // Create a new request
+    createRequest: protectedProcedure
+      .input(z.object({
+        localId: z.string(),
+        petLocalId: z.string().nullable().optional(),
+        petName: z.string().nullable().optional(),
+        status: z.string().default('active'),
+        preview: z.string().nullable().optional(),
+      }))
+      .mutation(({ ctx, input }) => {
+        return db.createRequest(ctx.user.id, input);
+      }),
+
+    // Update request status
+    updateStatus: protectedProcedure
+      .input(z.object({
+        localId: z.string(),
+        status: z.string(),
+      }))
+      .mutation(({ ctx, input }) => {
+        return db.updateRequestStatus(ctx.user.id, input.localId, input.status);
+      }),
+
+    // Get messages for a request
+    getMessages: protectedProcedure
+      .input(z.object({ requestLocalId: z.string() }))
+      .query(({ ctx, input }) => {
+        return db.getRequestMessages(ctx.user.id, input.requestLocalId);
+      }),
+
+    // Add a message to a request
+    addMessage: protectedProcedure
+      .input(z.object({
+        requestLocalId: z.string(),
+        localId: z.string(),
+        senderType: z.string().default('user'),
+        messageType: z.string().default('text'),
+        content: z.string().min(1),
+        audioUrl: z.string().nullable().optional(),
+        audioDuration: z.number().nullable().optional(),
+      }))
+      .mutation(({ ctx, input }) => {
+        const { requestLocalId, ...data } = input;
+        return db.addMessage(ctx.user.id, requestLocalId, data);
+      }),
+  }),
+
+  // Voice transcription route
+  voice: router({
+    transcribe: protectedProcedure
+      .input(z.object({
+        audioUrl: z.string(),
+        language: z.string().optional(),
+        prompt: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const result = await transcribeAudio(input);
+        if ('error' in result) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: result.error,
+          });
+        }
+        return result;
+      }),
+  }),
+
+  // Vet provider routes
+  providers: router({
+    list: protectedProcedure
+      .input(z.object({ petLocalId: z.string() }))
+      .query(({ ctx, input }) => {
+        return db.getPetProviders(ctx.user.id, input.petLocalId);
+      }),
+
+    upsert: protectedProcedure
+      .input(z.object({
+        localId: z.string(),
+        petLocalId: z.string(),
+        clinicName: z.string().min(1).max(255),
+        phone: z.string().max(32).nullable().optional(),
+        address: z.string().nullable().optional(),
+        providerType: z.string().default('primary_vet'),
+        notes: z.string().nullable().optional(),
+      }))
+      .mutation(({ ctx, input }) => {
+        return db.upsertProvider(ctx.user.id, input);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ localId: z.string() }))
+      .mutation(({ ctx, input }) => {
+        return db.deleteProvider(ctx.user.id, input.localId);
       }),
   }),
 

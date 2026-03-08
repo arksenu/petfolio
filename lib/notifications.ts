@@ -399,3 +399,55 @@ export async function cancelMedicationNotifications(medicationId: string): Promi
   }
   await cancelNotification(`med-refill-${medicationId}`);
 }
+
+// Show an immediate local notification for a concierge response
+export async function showConciergeNotification(
+  requestTitle: string,
+  messageBody: string,
+  requestId: string
+): Promise<string | null> {
+  if (Platform.OS === "web") {
+    return null;
+  }
+
+  const settings = await getNotificationSettings();
+  if (!settings.enabled) {
+    return null;
+  }
+
+  try {
+    const id = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `Petfolio Concierge`,
+        body: messageBody,
+        data: { type: "concierge", requestId },
+        sound: true,
+      },
+      trigger: null, // Show immediately
+    });
+    return id;
+  } catch (error) {
+    console.error("Error showing concierge notification:", error);
+    return null;
+  }
+}
+
+// Get the Expo push token for server-side notifications
+export async function getExpoPushToken(): Promise<string | null> {
+  if (Platform.OS === "web") {
+    return null;
+  }
+
+  try {
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) return null;
+
+    const token = await Notifications.getExpoPushTokenAsync({
+      projectId: undefined, // Uses the project ID from app.config.ts
+    });
+    return token.data;
+  } catch (error) {
+    console.error("Error getting push token:", error);
+    return null;
+  }
+}

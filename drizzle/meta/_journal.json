@@ -15,6 +15,13 @@
       "when": 1769426332271,
       "tag": "0001_amusing_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1772941857801,
+      "tag": "0002_mushy_radioactive_man",
+      "breakpoints": true
     }
   ]
 }

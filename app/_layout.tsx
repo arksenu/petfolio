@@ -9,6 +9,7 @@ import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { PetProvider } from "@/lib/pet-store";
+import { ConciergeProvider } from "@/lib/concierge-store";
 import { AuthProvider } from "@/lib/auth-context";
 import {
   SafeAreaFrameContext,
@@ -86,18 +87,23 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <PetProvider>
-              <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="oauth/callback" />
-              <Stack.Screen name="pet/[id]" options={{ presentation: "card" }} />
-              <Stack.Screen name="add-pet" options={{ presentation: "modal" }} />
-              <Stack.Screen name="edit-pet/[id]" options={{ presentation: "modal" }} />
-              <Stack.Screen name="add-document/[petId]" options={{ presentation: "modal" }} />
-              <Stack.Screen name="add-vaccination/[petId]" options={{ presentation: "modal" }} />
-              <Stack.Screen name="add-reminder/[petId]" options={{ presentation: "modal" }} />
-              <Stack.Screen name="share/[petId]" options={{ presentation: "modal" }} />
-            </Stack>
-              <StatusBar style="auto" />
+              <ConciergeProvider>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="(tabs)" />
+                  <Stack.Screen name="oauth/callback" />
+                  <Stack.Screen name="pet/[id]" options={{ presentation: "card" }} />
+                  <Stack.Screen name="add-pet" options={{ presentation: "modal" }} />
+                  <Stack.Screen name="edit-pet/[id]" options={{ presentation: "modal" }} />
+                  <Stack.Screen name="add-document/[petId]" options={{ presentation: "modal" }} />
+                  <Stack.Screen name="add-vaccination/[petId]" options={{ presentation: "modal" }} />
+                  <Stack.Screen name="add-reminder/[petId]" options={{ presentation: "modal" }} />
+                  <Stack.Screen name="share/[petId]" options={{ presentation: "modal" }} />
+                  <Stack.Screen name="new-request" options={{ presentation: "modal" }} />
+                  <Stack.Screen name="request-thread/[id]" options={{ presentation: "card" }} />
+                  <Stack.Screen name="add-provider/[petId]" options={{ presentation: "modal" }} />
+                </Stack>
+                <StatusBar style="auto" />
+              </ConciergeProvider>
             </PetProvider>
           </AuthProvider>
         </QueryClientProvider>

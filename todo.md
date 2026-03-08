@@ -136,3 +136,16 @@
 - [x] Fix cloud sync restore - pet data not restored after sign out (clear data) and sign back in
 - [x] Fix mobile web sign-in session not recognized after OAuth callback (cookie domain now includes region subdomain)
 - [ ] Fix mobile Safari sign-in - session cookie not stored/read after OAuth (SameSite/third-party cookie issue)
+
+## Concierge Features (v3.0)
+- [x] Add concierge types to shared/pet-types.ts
+- [x] Add concierge database tables (requests, messages, vet_providers)
+- [x] Add concierge server API endpoints
+- [x] Add concierge request store (local + cloud)
+- [x] Build Requests tab with request list
+- [x] Build New Request screen (text + voice)
+- [x] Build Request Thread screen (iMessage-style chat)
+- [x] Build voice recording and transcription
+- [x] Add push notifications for concierge responses (local + push token support)
+- [x] Add Vet/Provider association on pet profile
+- [x] Add provider management (add/edit/delete)

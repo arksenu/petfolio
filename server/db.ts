@@ -7,6 +7,9 @@ import {
   vaccinations, InsertVaccination, Vaccination,
   reminders, InsertReminder, Reminder,
   weightHistory, InsertWeightHistory, WeightHistory,
+  conciergeRequests, InsertConciergeRequest, ConciergeRequest,
+  conciergeMessages, InsertConciergeMessage, ConciergeMessage,
+  vetProviders, InsertVetProvider, VetProvider,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -375,4 +378,116 @@ export async function getUserSyncData(userId: number): Promise<SyncData> {
     reminders: userReminders,
     weightHistory: userWeight,
   };
+}
+
+
+// ==================== CONCIERGE REQUEST FUNCTIONS ====================
+
+export async function getUserRequests(userId: number): Promise<ConciergeRequest[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(conciergeRequests)
+    .where(eq(conciergeRequests.userId, userId))
+    .orderBy(desc(conciergeRequests.updatedAt));
+}
+
+export async function getRequestByLocalId(userId: number, localId: string): Promise<ConciergeRequest | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(conciergeRequests)
+    .where(and(eq(conciergeRequests.userId, userId), eq(conciergeRequests.localId, localId)))
+    .limit(1);
+  
+  return result[0];
+}
+
+export async function createRequest(userId: number, data: Omit<InsertConciergeRequest, 'userId'>): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(conciergeRequests).values({ ...data, userId });
+  return Number(result[0].insertId);
+}
+
+export async function updateRequestStatus(userId: number, localId: string, status: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(conciergeRequests)
+    .set({ status })
+    .where(and(eq(conciergeRequests.userId, userId), eq(conciergeRequests.localId, localId)));
+}
+
+// ==================== CONCIERGE MESSAGE FUNCTIONS ====================
+
+export async function getRequestMessages(userId: number, requestLocalId: string): Promise<ConciergeMessage[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const request = await getRequestByLocalId(userId, requestLocalId);
+  if (!request) return [];
+  
+  return db.select().from(conciergeMessages)
+    .where(eq(conciergeMessages.requestId, request.id))
+    .orderBy(conciergeMessages.createdAt);
+}
+
+export async function addMessage(userId: number, requestLocalId: string, data: Omit<InsertConciergeMessage, 'userId' | 'requestId'>): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const request = await getRequestByLocalId(userId, requestLocalId);
+  if (!request) throw new Error("Request not found");
+  
+  const result = await db.insert(conciergeMessages).values({ ...data, userId, requestId: request.id });
+  
+  // Update request preview and message count
+  const preview = data.content.substring(0, 200);
+  await db.update(conciergeRequests)
+    .set({ 
+      preview, 
+      messageCount: request.messageCount + 1,
+    })
+    .where(eq(conciergeRequests.id, request.id));
+  
+  return Number(result[0].insertId);
+}
+
+// ==================== VET PROVIDER FUNCTIONS ====================
+
+export async function getPetProviders(userId: number, petLocalId: string): Promise<VetProvider[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(vetProviders)
+    .where(and(eq(vetProviders.userId, userId), eq(vetProviders.petLocalId, petLocalId)));
+}
+
+export async function upsertProvider(userId: number, data: Omit<InsertVetProvider, 'userId'>): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const existing = await db.select().from(vetProviders)
+    .where(and(eq(vetProviders.userId, userId), eq(vetProviders.localId, data.localId)))
+    .limit(1);
+  
+  if (existing[0]) {
+    await db.update(vetProviders)
+      .set({ ...data, userId })
+      .where(eq(vetProviders.id, existing[0].id));
+    return existing[0].id;
+  } else {
+    const result = await db.insert(vetProviders).values({ ...data, userId });
+    return Number(result[0].insertId);
+  }
+}
+
+export async function deleteProvider(userId: number, localId: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(vetProviders)
+    .where(and(eq(vetProviders.userId, userId), eq(vetProviders.localId, localId)));
 }

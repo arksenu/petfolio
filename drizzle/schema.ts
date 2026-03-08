@@ -116,3 +116,55 @@ export const weightHistory = mysqlTable("weightHistory", {
 
 export type WeightHistory = typeof weightHistory.$inferSelect;
 export type InsertWeightHistory = typeof weightHistory.$inferInsert;
+
+// Concierge requests table
+export const conciergeRequests = mysqlTable("conciergeRequests", {
+  id: int("id").autoincrement().primaryKey(),
+  localId: varchar("localId", { length: 64 }).notNull(),
+  userId: int("userId").notNull(),
+  petLocalId: varchar("petLocalId", { length: 64 }),
+  petName: varchar("petName", { length: 255 }),
+  status: varchar("status", { length: 32 }).default("active").notNull(),
+  preview: text("preview"),
+  messageCount: int("messageCount").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ConciergeRequest = typeof conciergeRequests.$inferSelect;
+export type InsertConciergeRequest = typeof conciergeRequests.$inferInsert;
+
+// Concierge messages table
+export const conciergeMessages = mysqlTable("conciergeMessages", {
+  id: int("id").autoincrement().primaryKey(),
+  localId: varchar("localId", { length: 64 }).notNull(),
+  requestId: int("requestId").notNull(),
+  userId: int("userId").notNull(),
+  senderType: varchar("senderType", { length: 32 }).default("user").notNull(),
+  messageType: varchar("messageType", { length: 32 }).default("text").notNull(),
+  content: text("content").notNull(),
+  audioUrl: text("audioUrl"),
+  audioDuration: int("audioDuration"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ConciergeMessage = typeof conciergeMessages.$inferSelect;
+export type InsertConciergeMessage = typeof conciergeMessages.$inferInsert;
+
+// Vet providers table
+export const vetProviders = mysqlTable("vetProviders", {
+  id: int("id").autoincrement().primaryKey(),
+  localId: varchar("localId", { length: 64 }).notNull(),
+  userId: int("userId").notNull(),
+  petLocalId: varchar("petLocalId", { length: 64 }).notNull(),
+  clinicName: varchar("clinicName", { length: 255 }).notNull(),
+  phone: varchar("phone", { length: 32 }),
+  address: text("address"),
+  providerType: varchar("providerType", { length: 32 }).default("primary_vet").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type VetProvider = typeof vetProviders.$inferSelect;
+export type InsertVetProvider = typeof vetProviders.$inferInsert;

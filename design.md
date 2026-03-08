@@ -254,3 +254,128 @@ Tab Navigator (Main)
 - date: Date
 - isEnabled: boolean
 - createdAt: Date
+
+
+## Concierge Feature Design (Phase 1)
+
+### Overview
+The concierge is a human-powered service layer. Users submit requests via chat-style interface (text or voice). On the backend, the owner (Dario) handles requests manually - calling vets, confirming appointments, etc. - then responds through the same thread. No automation.
+
+### New Screens
+
+#### 12. Requests Tab (Bottom Tab)
+- **Layout**: FlatList of request cards, newest first
+- **Header**: "Requests" title with "New Request" button (top-right)
+- **Request Card**:
+  - Status pill: Active (primary/teal), Pending (warning/yellow), Resolved (muted)
+  - Preview of the initial message (truncated to 2 lines max)
+  - Timestamp (relative: "2h ago", "Yesterday", "Jan 15")
+  - Pet name tag if associated with a pet
+- **Active requests**: Teal left border accent, slightly elevated
+- **Resolved requests**: No accent, muted text
+- **Empty State**: "No requests yet" with illustration and "New Request" button
+
+#### 13. Request Thread Screen (Stack from Requests Tab)
+- **Layout**: iMessage-style chat bubbles
+- **Header**: Back arrow, request status pill, pet name if associated
+- **User messages**: Right-aligned, primary (teal) background, white text
+- **Concierge responses**: Left-aligned, surface background, foreground text
+- **Voice messages**: Show as a waveform-style bubble with play button and duration
+- **Input bar** (bottom, sticky):
+  - Text input (multiline, "Type a message...")
+  - Microphone button (right side, toggles to stop/send when recording)
+  - Send button (appears when text is entered, replaces mic button)
+- **Recording state**: Red dot indicator, timer, waveform animation
+- **Status banner**: Top of thread shows current status (Pending/In Progress/Resolved)
+
+#### 14. New Request Screen (Modal from Requests Tab)
+- **Pet selector**: Optional dropdown to associate request with a pet
+- **Message input**: Large text area for the request
+- **Voice option**: Mic button to record voice message instead
+- **Submit button**: "Send Request" at bottom
+
+#### 15. Vet/Provider Section (within Pet Profile)
+- **New tab or section**: "Providers" added to pet profile tabs
+- **Provider Card**:
+  - Clinic name (bold)
+  - Phone number (tappable to call)
+  - Address (tappable to open maps)
+  - Type: Primary Vet, Specialist, Emergency, Groomer, Boarding
+- **Add Provider button**: FAB or header action
+- **Add/Edit Provider Form**:
+  - Clinic name (required)
+  - Phone number
+  - Address
+  - Type (dropdown)
+  - Notes
+
+### Key User Flows
+
+#### Flow 6: Submitting a Concierge Request
+1. User taps "Requests" tab
+2. Taps "+" or "New Request" button
+3. Optionally selects a pet
+4. Types message or records voice message
+5. Taps "Send Request"
+6. Request appears in list as "Active"
+7. User gets push notification when concierge responds
+
+#### Flow 7: Following Up on a Request
+1. User taps on an existing request in the list
+2. Thread opens showing original message and any responses
+3. User types follow-up message
+4. Message appears in thread
+
+#### Flow 8: Adding a Vet Provider
+1. Pet Profile → "Providers" tab
+2. Tap "+" button
+3. Fill clinic name, phone, address, type
+4. Save → Provider appears in list
+
+### Data Models
+
+#### ConciergeRequest
+- id: string
+- userId: number
+- petId?: string (local pet ID)
+- status: 'active' | 'pending' | 'in_progress' | 'resolved'
+- createdAt: string
+- updatedAt: string
+
+#### ConciergeMessage
+- id: string
+- requestId: string
+- senderType: 'user' | 'concierge'
+- messageType: 'text' | 'voice'
+- content: string (text content or transcription)
+- audioUrl?: string (for voice messages)
+- audioDuration?: number (seconds)
+- createdAt: string
+
+#### VetProvider
+- id: string
+- petId: string
+- clinicName: string
+- phone?: string
+- address?: string
+- providerType: 'primary_vet' | 'specialist' | 'emergency' | 'groomer' | 'boarding' | 'other'
+- notes?: string
+- createdAt: string
+
+### Navigation Update
+```
+Tab Navigator (Main)
+├── Home (Dashboard)
+│   └── Pet Profile (Stack)
+│       ├── Records Tab
+│       ├── Vaccinations Tab
+│       ├── Medications Tab
+│       ├── Reminders Tab
+│       ├── Providers Tab (NEW)
+│       └── Share Profile
+├── Requests (NEW)
+│   ├── Request List
+│   ├── New Request (Modal)
+│   └── Request Thread (Stack)
+└── Settings
+```

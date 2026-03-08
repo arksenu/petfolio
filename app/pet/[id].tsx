@@ -506,6 +506,33 @@ export default function PetProfileScreen() {
           </View>
         </View>
 
+        {/* Vet Providers Link */}
+        <TouchableOpacity
+          onPress={() => {
+            if (Platform.OS !== "web") {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+            router.push(`/vet-providers/${id}` as any);
+          }}
+          style={[styles.vetProviderLink, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          activeOpacity={0.7}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <IconSymbol name="cross.case.fill" size={20} color={colors.primary} />
+            <View>
+              <Text style={[{ fontSize: 15, fontWeight: '600', color: colors.foreground }]}>
+                Vet Providers
+              </Text>
+              <Text style={[{ fontSize: 12, color: colors.muted, marginTop: 1 }]}>
+                {(pet.vetProviders?.length || 0) === 0
+                  ? 'Add your pet\'s vet'
+                  : `${pet.vetProviders!.length} provider${pet.vetProviders!.length > 1 ? 's' : ''}`}
+              </Text>
+            </View>
+          </View>
+          <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+        </TouchableOpacity>
+
         {/* Tabs */}
         <View style={[styles.tabs, { borderBottomColor: colors.border }]}>
           {(["records", "vaccinations", "medications", "reminders"] as TabType[]).map((tab) => (
@@ -894,5 +921,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
+  },
+  vetProviderLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
   },
 });
