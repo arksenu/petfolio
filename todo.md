@@ -161,3 +161,6 @@
 
 ## Dev Workflow (v3.3)
 - [x] Add dev-only auth bypass for local Expo Go testing (EXPO_PUBLIC_DEV_SESSION_TOKEN)
+
+## Bug Fixes (v3.4)
+- [x] Fix login.tsx router.replace called during render (move redirect to useEffect)

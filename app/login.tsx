@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Text, View, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { Image } from "expo-image";
@@ -19,8 +20,13 @@ export default function LoginScreen() {
   const { loading, isAuthenticated } = useAuth();
 
   // If already authenticated, redirect to home
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace("/(tabs)");
+    }
+  }, [isAuthenticated, router]);
+
   if (isAuthenticated) {
-    router.replace("/(tabs)");
     return null;
   }
 
