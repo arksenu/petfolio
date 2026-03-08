@@ -149,3 +149,4 @@
 - [x] Add push notifications for concierge responses (local + push token support)
 - [x] Add Vet/Provider association on pet profile
 - [x] Add provider management (add/edit/delete)
+- [x] Fix voice recording button not visible - added Type/Voice toggle to new request screen
