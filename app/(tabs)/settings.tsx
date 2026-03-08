@@ -1,10 +1,12 @@
-import { Text, View, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform } from "react-native";
+import { Text, View, TouchableOpacity, ScrollView, StyleSheet, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
+import { usePetStore } from "@/lib/pet-store";
+import { confirmAction } from "@/lib/confirm";
 
 interface SettingsItemProps {
   icon: React.ComponentProps<typeof IconSymbol>["name"];
@@ -45,6 +47,7 @@ function SettingsItem({ icon, title, subtitle, onPress, danger }: SettingsItemPr
 export default function SettingsScreen() {
   const colors = useColors();
   const router = useRouter();
+  const { clearAllData } = usePetStore();
 
   const handleNotifications = () => {
     if (Platform.OS !== "web") {
@@ -54,7 +57,12 @@ export default function SettingsScreen() {
   };
 
   const handleExportData = () => {
-    Alert.alert("Export Data", "Data export will be available in a future update.");
+    if (Platform.OS === "web") {
+      window.alert("Data export will be available in a future update.");
+    } else {
+      const { Alert } = require("react-native");
+      Alert.alert("Export Data", "Data export will be available in a future update.");
+    }
   };
 
   const handleAccount = () => {
@@ -65,27 +73,36 @@ export default function SettingsScreen() {
   };
 
   const handlePrivacy = () => {
-    Alert.alert("Privacy", "Privacy settings will be available in a future update.");
+    if (Platform.OS === "web") {
+      window.alert("Privacy settings will be available in a future update.");
+    } else {
+      const { Alert } = require("react-native");
+      Alert.alert("Privacy", "Privacy settings will be available in a future update.");
+    }
   };
 
   const handleHelp = () => {
-    Alert.alert("Help & Support", "Help and support will be available in a future update.");
+    if (Platform.OS === "web") {
+      window.alert("Help and support will be available in a future update.");
+    } else {
+      const { Alert } = require("react-native");
+      Alert.alert("Help & Support", "Help and support will be available in a future update.");
+    }
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
+    confirmAction(
       "Delete All Data",
       "Are you sure you want to delete all your pet data? This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            Alert.alert("Data Deleted", "All your pet data has been deleted.");
-          },
-        },
-      ]
+      async () => {
+        await clearAllData();
+        if (Platform.OS === "web") {
+          window.alert("All your pet data has been deleted.");
+        } else {
+          const { Alert } = require("react-native");
+          Alert.alert("Data Deleted", "All your pet data has been deleted.");
+        }
+      }
     );
   };
 

@@ -162,6 +162,8 @@ interface ConciergeContextValue {
   addProvider: (petId: string, provider: Omit<VetProvider, 'id' | 'createdAt' | 'updatedAt'>) => VetProvider;
   updateProvider: (petId: string, provider: VetProvider) => void;
   deleteProvider: (petId: string, providerId: string) => void;
+  // Clear all data
+  clearAllData: () => Promise<void>;
 }
 
 const ConciergeContext = createContext<ConciergeContextValue | null>(null);
@@ -321,6 +323,11 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'DELETE_PROVIDER', payload: { petId, providerId } });
   }, []);
 
+  const clearAllData = useCallback(async () => {
+    dispatch({ type: 'CLEAR_ALL' });
+    await AsyncStorage.removeItem(STORAGE_KEY);
+  }, []);
+
   const value: ConciergeContextValue = {
     state,
     createRequest,
@@ -330,6 +337,7 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
     addProvider,
     updateProvider,
     deleteProvider,
+    clearAllData,
   };
 
   return (

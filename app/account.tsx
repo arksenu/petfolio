@@ -8,12 +8,14 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/hooks/use-auth";
 import { usePetStore } from "@/lib/pet-store";
+import { useConcierge } from "@/lib/concierge-store";
 
 export default function AccountScreen() {
   const router = useRouter();
   const colors = useColors();
   const { user, loading, isAuthenticated, logout } = useAuth();
   const { clearAllData } = usePetStore();
+  const { clearAllData: clearConciergeData } = useConcierge();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -33,6 +35,7 @@ export default function AccountScreen() {
     try {
       if (clearData) {
         await clearAllData();
+        await clearConciergeData();
       }
       await logout();
       setShowLogoutModal(false);

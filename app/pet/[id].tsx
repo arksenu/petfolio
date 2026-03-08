@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   Platform,
   FlatList,
 } from "react-native";
@@ -17,6 +16,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
+import { confirmAction, confirmChoice } from "@/lib/confirm";
 import {
   calculateAge,
   formatDate,
@@ -92,20 +92,13 @@ export default function PetProfileScreen() {
   };
 
   const handleDelete = () => {
-    Alert.alert(
+    confirmAction(
       "Delete Pet",
       `Are you sure you want to delete ${pet.name}? This will also delete all their records, vaccinations, and reminders.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            await deletePet(pet.id);
-            router.back();
-          },
-        },
-      ]
+      async () => {
+        await deletePet(pet.id);
+        router.back();
+      }
     );
   };
 
@@ -138,20 +131,17 @@ export default function PetProfileScreen() {
   };
 
   const handleDeleteMedication = (medId: string) => {
-    Alert.alert("Delete Medication", "Are you sure you want to delete this medication?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteMedication(medId) },
-    ]);
+    confirmAction("Delete Medication", "Are you sure you want to delete this medication?", () => deleteMedication(medId));
   };
 
   const handleLogDose = (medId: string, medName: string) => {
-    Alert.alert(
+    confirmChoice(
       "Log Dose",
       `Did you give ${pet?.name} their ${medName}?`,
-      [
-        { text: "Skip", style: "cancel", onPress: () => logDose(medId, true) },
-        { text: "Yes, Given", onPress: () => logDose(medId, false) },
-      ]
+      "Yes, Given",
+      "Skip",
+      () => logDose(medId, false),
+      () => logDose(medId, true)
     );
   };
 
@@ -203,24 +193,15 @@ export default function PetProfileScreen() {
   };
 
   const handleDeleteDocument = (docId: string) => {
-    Alert.alert("Delete Document", "Are you sure you want to delete this document?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteDocument(docId) },
-    ]);
+    confirmAction("Delete Document", "Are you sure you want to delete this document?", () => deleteDocument(docId));
   };
 
   const handleDeleteVaccination = (vaxId: string) => {
-    Alert.alert("Delete Vaccination", "Are you sure you want to delete this vaccination record?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteVaccination(vaxId) },
-    ]);
+    confirmAction("Delete Vaccination", "Are you sure you want to delete this vaccination record?", () => deleteVaccination(vaxId));
   };
 
   const handleDeleteReminder = (reminderId: string) => {
-    Alert.alert("Delete Reminder", "Are you sure you want to delete this reminder?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteReminder(reminderId) },
-    ]);
+    confirmAction("Delete Reminder", "Are you sure you want to delete this reminder?", () => deleteReminder(reminderId));
   };
 
   const getStatusColor = (status: string) => {

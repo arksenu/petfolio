@@ -18,6 +18,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { usePetStore } from "@/lib/pet-store";
+import { confirmAction } from "@/lib/confirm";
 import { formatDate, WeightEntry } from "@/shared/pet-types";
 import { CustomDatePicker } from "@/components/custom-date-picker";
 
@@ -97,7 +98,11 @@ export default function WeightHistoryScreen() {
   const handleAddEntry = async () => {
     const weightValue = parseFloat(weight);
     if (!weightValue || weightValue <= 0) {
-      Alert.alert("Invalid Weight", "Please enter a valid weight.");
+      if (Platform.OS === "web") {
+        window.alert("Please enter a valid weight.");
+      } else {
+        Alert.alert("Invalid Weight", "Please enter a valid weight.");
+      }
       return;
     }
 
@@ -122,17 +127,18 @@ export default function WeightHistoryScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (error) {
-      Alert.alert("Error", "Failed to add weight entry.");
+      if (Platform.OS === "web") {
+        window.alert("Failed to add weight entry.");
+      } else {
+        Alert.alert("Error", "Failed to add weight entry.");
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteEntry = (entryId: string) => {
-    Alert.alert("Delete Entry", "Are you sure you want to delete this weight entry?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteWeightEntry(entryId) },
-    ]);
+    confirmAction("Delete Entry", "Are you sure you want to delete this weight entry?", () => deleteWeightEntry(entryId));
   };
 
   const renderChart = () => {

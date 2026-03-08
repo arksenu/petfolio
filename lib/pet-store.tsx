@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useReducer, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Pet,
@@ -227,6 +227,7 @@ const PetContext = createContext<PetContextType | undefined>(undefined);
 export function PetProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(petReducer, initialState);
   const { isAuthenticated, user } = useAuth();
+  const isClearingRef = useRef(false);
   
   // tRPC queries and mutations for cloud sync
   const syncDataQuery = trpc.sync.getData.useQuery(undefined, {
@@ -359,7 +360,7 @@ export function PetProvider({ children }: { children: ReactNode }) {
 
   // Save data to AsyncStorage whenever state changes
   useEffect(() => {
-    if (state.isInitialized) {
+    if (state.isInitialized && !isClearingRef.current) {
       saveData();
     }
   }, [state.pets, state.documents, state.vaccinations, state.reminders, state.weightHistory, state.medications, state.isInitialized]);
@@ -961,7 +962,13 @@ export function PetProvider({ children }: { children: ReactNode }) {
   // Clear all local data
   async function clearAllData(): Promise<void> {
     try {
-      // Clear all AsyncStorage keys
+      // Set clearing flag to prevent save useEffect from re-writing empty arrays
+      isClearingRef.current = true;
+      
+      // Reset state to initial first
+      dispatch({ type: 'CLEAR_ALL_DATA' });
+      
+      // Then clear all AsyncStorage keys
       await Promise.all([
         AsyncStorage.removeItem(STORAGE_KEYS.PETS),
         AsyncStorage.removeItem(STORAGE_KEYS.DOCUMENTS),
@@ -972,10 +979,13 @@ export function PetProvider({ children }: { children: ReactNode }) {
         AsyncStorage.removeItem(STORAGE_KEYS.LAST_SYNC),
       ]);
       
-      // Reset state to initial
-      dispatch({ type: 'CLEAR_ALL_DATA' });
+      // Re-enable saving after a tick
+      setTimeout(() => {
+        isClearingRef.current = false;
+      }, 100);
     } catch (error) {
       console.error('Failed to clear all data:', error);
+      isClearingRef.current = false;
     }
   }
 

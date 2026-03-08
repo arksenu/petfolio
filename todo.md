@@ -129,10 +129,10 @@
 - [x] Fix sign out to ask user whether to keep or clear local data
 - [x] Fix mobile web sign in (page unavailable error) - dynamic frontend URL from request hostname
 - [x] Investigate Expo Go sign in possibility - NOT POSSIBLE: OAuth provider rejects 'exp://' scheme used by Expo Go. Users must use web preview or build standalone app.
-- [ ] Fix delete pet button not working (desktop/mobile web)
-- [ ] Fix delete document/vaccination/medication/reminder buttons not working
+- [x] Fix delete pet button not working (desktop/mobile web) - replaced Alert.alert with cross-platform confirm
+- [x] Fix delete document/vaccination/medication/reminder buttons not working - cross-platform confirm
 - [ ] Fix PDF viewer on web (WebView not supported on web platform)
-- [ ] Fix Log Dose button not working for medications
+- [x] Fix Log Dose button not working for medications - cross-platform confirmChoice
 - [x] Fix cloud sync restore - pet data not restored after sign out (clear data) and sign back in
 - [x] Fix mobile web sign-in session not recognized after OAuth callback (cookie domain now includes region subdomain)
 - [ ] Fix mobile Safari sign-in - session cookie not stored/read after OAuth (SameSite/third-party cookie issue)
@@ -164,3 +164,8 @@
 
 ## Bug Fixes (v3.4)
 - [x] Fix login.tsx router.replace called during render (move redirect to useEffect)
+
+## Bug Fixes (v3.5)
+- [x] Fix delete pet not working on web preview (replaced Alert.alert with cross-platform confirmAction)
+- [x] Fix sign out with "clear local data" not actually clearing data (race condition fix + concierge clear)
+- [x] Fix web preview showing wrong account after switching (web fetchUser always calls API, logout clears all stores)
