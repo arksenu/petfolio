@@ -158,3 +158,6 @@
 - [x] Integrate server-side voice transcription (voiceTranscription.ts)
 - [x] Build admin API endpoints (list pending requests, respond to requests, update status)
 - [x] Trigger push notification when admin responds (via notifyOwner + local notification on client sync)
+
+## Dev Workflow (v3.3)
+- [x] Add dev-only auth bypass for local Expo Go testing (EXPO_PUBLIC_DEV_SESSION_TOKEN)

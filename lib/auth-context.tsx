@@ -117,6 +117,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = useMemo(() => Boolean(user), [user]);
 
+  // Dev-only: inject session token from env var for local Expo Go testing
+  const injectDevToken = useCallback(async () => {
+    if (!__DEV__ || Platform.OS === "web") return false;
+    const devToken = process.env.EXPO_PUBLIC_DEV_SESSION_TOKEN;
+    if (!devToken) return false;
+
+    console.log("[AuthContext] DEV: injecting session token from EXPO_PUBLIC_DEV_SESSION_TOKEN");
+    await Auth.setSessionToken(devToken);
+
+    // Fetch user info from the remote server using this token
+    try {
+      const apiUser = await Api.getMe();
+      if (apiUser) {
+        const userInfo: Auth.User = {
+          id: apiUser.id,
+          openId: apiUser.openId,
+          name: apiUser.name,
+          email: apiUser.email,
+          loginMethod: apiUser.loginMethod,
+          lastSignedIn: new Date(apiUser.lastSignedIn),
+        };
+        setUser(userInfo);
+        await Auth.setUserInfo(userInfo);
+        console.log("[AuthContext] DEV: authenticated as", userInfo.name ?? userInfo.email);
+        return true;
+      }
+    } catch (err) {
+      console.warn("[AuthContext] DEV: token may be expired, falling back to normal flow", err);
+      await Auth.removeSessionToken();
+    }
+    return false;
+  }, []);
+
   // Initial load
   useEffect(() => {
     console.log("[AuthContext] Initial load, platform:", Platform.OS);
@@ -124,30 +157,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (Platform.OS === "web") {
       fetchUser();
     } else {
-      // Native: check for cached user info first for faster initial load
-      Auth.getUserInfo().then((cachedUser) => {
-        console.log("[AuthContext] Native cached user check:", cachedUser);
-        if (cachedUser) {
-          // Verify we also have a session token
-          Auth.getSessionToken().then((token) => {
-            if (token) {
-              console.log("[AuthContext] Native: setting cached user immediately");
-              setUser(cachedUser);
-              setLoading(false);
-            } else {
-              console.log("[AuthContext] Native: cached user but no token, clearing...");
-              Auth.clearUserInfo().then(() => {
-                setUser(null);
-                setLoading(false);
-              });
-            }
-          });
-        } else {
-          fetchUser();
+      // Try dev token bypass first, then normal flow
+      injectDevToken().then((injected) => {
+        if (injected) {
+          setLoading(false);
+          return;
         }
+        // Normal native flow: check for cached user info first
+        Auth.getUserInfo().then((cachedUser) => {
+          console.log("[AuthContext] Native cached user check:", cachedUser);
+          if (cachedUser) {
+            Auth.getSessionToken().then((token) => {
+              if (token) {
+                console.log("[AuthContext] Native: setting cached user immediately");
+                setUser(cachedUser);
+                setLoading(false);
+              } else {
+                console.log("[AuthContext] Native: cached user but no token, clearing...");
+                Auth.clearUserInfo().then(() => {
+                  setUser(null);
+                  setLoading(false);
+                });
+              }
+            });
+          } else {
+            fetchUser();
+          }
+        });
       });
     }
-  }, [fetchUser]);
+  }, [fetchUser, injectDevToken]);
 
   useEffect(() => {
     console.log("[AuthContext] State updated:", {
