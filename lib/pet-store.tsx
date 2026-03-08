@@ -251,7 +251,7 @@ export function PetProvider({ children }: { children: ReactNode }) {
 
   // Restore data from cloud when user signs in and local data is empty
   useEffect(() => {
-    if (isAuthenticated && state.isInitialized && state.pets.length === 0 && !state.isSyncing) {
+    if (isAuthenticated && state.isInitialized && state.pets.length === 0 && !state.isSyncing && !isClearingRef.current) {
       restoreFromCloud();
     }
   }, [isAuthenticated, state.isInitialized, state.pets.length]);

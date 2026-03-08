@@ -169,3 +169,7 @@
 - [x] Fix delete pet not working on web preview (replaced Alert.alert with cross-platform confirmAction)
 - [x] Fix sign out with "clear local data" not actually clearing data (race condition fix + concierge clear)
 - [x] Fix web preview showing wrong account after switching (web fetchUser always calls API, logout clears all stores)
+
+## Bug Fixes (v3.6)
+- [x] Fix sign out with "clear local data" still not clearing pet data on web preview (restoreFromCloud race + logout ordering)
+- [x] Fix web preview always signing in as dariomazhara87 — expected behavior: Manus OAuth is single-identity tied to Manus account

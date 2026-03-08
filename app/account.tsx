@@ -33,11 +33,13 @@ export default function AccountScreen() {
   const performLogout = async (clearData: boolean) => {
     setIsLoggingOut(true);
     try {
+      // Logout first so isAuthenticated becomes false before clearing data
+      // This prevents restoreFromCloud from re-fetching data after clear
+      await logout();
       if (clearData) {
         await clearAllData();
         await clearConciergeData();
       }
-      await logout();
       setShowLogoutModal(false);
       router.replace("/(tabs)");
     } catch (error) {
