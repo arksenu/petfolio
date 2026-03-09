@@ -315,6 +315,43 @@ export const appRouter = router({
       }),
   }),
 
+  // Medication routes
+  medications: router({
+    upsert: protectedProcedure
+      .input(z.object({
+        localId: z.string(),
+        petLocalId: z.string(),
+        name: z.string().min(1).max(255),
+        dosage: z.string().max(255),
+        frequency: z.string().max(64),
+        instructions: z.string().nullable().optional(),
+        startDate: z.coerce.date(),
+        endDate: z.coerce.date().nullable().optional(),
+        isOngoing: z.boolean().default(true),
+        pillsRemaining: z.number().nullable().optional(),
+        pillsPerRefill: z.number().nullable().optional(),
+        refillReminderAt: z.number().nullable().optional(),
+        doseLog: z.array(z.object({
+          id: z.string(),
+          medicationId: z.string(),
+          takenAt: z.string(),
+          skipped: z.boolean().optional(),
+          notes: z.string().optional(),
+        })).nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Resolve petId from petLocalId
+        const petId = await db.getPetDbId(ctx.user.id, input.petLocalId);
+        return db.upsertMedication(ctx.user.id, { ...input, petId, startDate: input.startDate, endDate: input.endDate ?? null });
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ localId: z.string() }))
+      .mutation(({ ctx, input }) => {
+        return db.deleteMedication(ctx.user.id, input.localId);
+      }),
+  }),
+
   // Admin concierge management endpoints
   admin: router({
     // List all non-resolved requests with user info

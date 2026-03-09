@@ -1,0 +1,21 @@
+CREATE TABLE `medications` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`localId` varchar(64) NOT NULL,
+	`petId` int NOT NULL,
+	`userId` int NOT NULL,
+	`petLocalId` varchar(64) NOT NULL,
+	`name` varchar(255) NOT NULL,
+	`dosage` varchar(255) NOT NULL,
+	`frequency` varchar(64) NOT NULL,
+	`instructions` text,
+	`startDate` timestamp NOT NULL,
+	`endDate` timestamp,
+	`isOngoing` boolean NOT NULL DEFAULT true,
+	`pillsRemaining` int,
+	`pillsPerRefill` int,
+	`refillReminderAt` int,
+	`doseLog` json,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `medications_id` PRIMARY KEY(`id`)
+);

@@ -176,3 +176,14 @@
 
 ## Bug Fixes (v3.7)
 - [x] Fix stale account identity after re-login: clear app_session_id cookie on both .us2.manus.computer and .manus.computer domains during logout
+
+## Bug Fixes (v3.8)
+- [ ] Fix cloud sync: pet profile changes not persisting to server DB — lost after logout/login cycle on web preview
+
+## Bug Fixes (v3.9) - Cloud Sync
+- [x] Fix vet providers not syncing to cloud (updatePet now calls upsertProviderMutation for each provider)
+- [x] Fix addWeightEntry not syncing pet weight field to cloud (now calls upsertPetMutation after weight update)
+- [x] Add medication cloud sync (DB table + tRPC endpoints existed; wired addMedication/updateMedication/deleteMedication/logDose to call upsertMedMutation/deleteMedMutation)
+- [x] Add vet providers and medications to restoreFromCloud / SyncData (restoreFromCloud now maps providers to petsWithProviders and medications array)
+- [x] Add vet providers and medications to syncWithCloud (full push of all providers and medications)
+- [ ] Fix vaccinations not restoring from cloud on login

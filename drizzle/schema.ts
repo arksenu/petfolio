@@ -168,3 +168,28 @@ export const vetProviders = mysqlTable("vetProviders", {
 
 export type VetProvider = typeof vetProviders.$inferSelect;
 export type InsertVetProvider = typeof vetProviders.$inferInsert;
+
+// Medications table
+export const medications = mysqlTable("medications", {
+  id: int("id").autoincrement().primaryKey(),
+  localId: varchar("localId", { length: 64 }).notNull(),
+  petId: int("petId").notNull(),
+  userId: int("userId").notNull(),
+  petLocalId: varchar("petLocalId", { length: 64 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  dosage: varchar("dosage", { length: 255 }).notNull(),
+  frequency: varchar("frequency", { length: 64 }).notNull(),
+  instructions: text("instructions"),
+  startDate: timestamp("startDate").notNull(),
+  endDate: timestamp("endDate"),
+  isOngoing: boolean("isOngoing").default(true).notNull(),
+  pillsRemaining: int("pillsRemaining"),
+  pillsPerRefill: int("pillsPerRefill"),
+  refillReminderAt: int("refillReminderAt"),
+  doseLog: json("doseLog").$type<Array<{ id: string; medicationId: string; takenAt: string; skipped?: boolean; notes?: string }>>(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type MedicationRow = typeof medications.$inferSelect;
+export type InsertMedication = typeof medications.$inferInsert;

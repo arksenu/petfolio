@@ -10,6 +10,7 @@ import {
   conciergeRequests, InsertConciergeRequest, ConciergeRequest,
   conciergeMessages, InsertConciergeMessage, ConciergeMessage,
   vetProviders, InsertVetProvider, VetProvider,
+  medications, InsertMedication, MedicationRow,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -355,20 +356,24 @@ export interface SyncData {
   vaccinations: Vaccination[];
   reminders: Reminder[];
   weightHistory: WeightHistory[];
+  providers: VetProvider[];
+  medications: MedicationRow[];
 }
 
 export async function getUserSyncData(userId: number): Promise<SyncData> {
   const db = await getDb();
   if (!db) {
-    return { pets: [], documents: [], vaccinations: [], reminders: [], weightHistory: [] };
+    return { pets: [], documents: [], vaccinations: [], reminders: [], weightHistory: [], providers: [], medications: [] };
   }
   
-  const [userPets, userDocs, userVax, userReminders, userWeight] = await Promise.all([
+  const [userPets, userDocs, userVax, userReminders, userWeight, userProviders, userMeds] = await Promise.all([
     db.select().from(pets).where(eq(pets.userId, userId)),
     db.select().from(petDocuments).where(eq(petDocuments.userId, userId)),
     db.select().from(vaccinations).where(eq(vaccinations.userId, userId)),
     db.select().from(reminders).where(eq(reminders.userId, userId)),
     db.select().from(weightHistory).where(eq(weightHistory.userId, userId)),
+    db.select().from(vetProviders).where(eq(vetProviders.userId, userId)),
+    db.select().from(medications).where(eq(medications.userId, userId)),
   ]);
   
   return {
@@ -377,6 +382,8 @@ export async function getUserSyncData(userId: number): Promise<SyncData> {
     vaccinations: userVax,
     reminders: userReminders,
     weightHistory: userWeight,
+    providers: userProviders,
+    medications: userMeds,
   };
 }
 
@@ -584,4 +591,57 @@ export async function deleteProvider(userId: number, localId: string): Promise<v
   
   await db.delete(vetProviders)
     .where(and(eq(vetProviders.userId, userId), eq(vetProviders.localId, localId)));
+}
+
+// Get DB pet ID from localId
+export async function getPetDbId(userId: number, petLocalId: string): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select({ id: pets.id }).from(pets)
+    .where(and(eq(pets.userId, userId), eq(pets.localId, petLocalId)))
+    .limit(1);
+  if (!result[0]) throw new Error(`Pet not found: ${petLocalId}`);
+  return result[0].id;
+}
+
+// Get all providers for a user (all pets)
+export async function getUserProviders(userId: number): Promise<VetProvider[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(vetProviders).where(eq(vetProviders.userId, userId));
+}
+
+// ==================== MEDICATION FUNCTIONS ====================
+
+export async function getUserMedications(userId: number): Promise<MedicationRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(medications).where(eq(medications.userId, userId));
+}
+
+export async function upsertMedication(userId: number, data: Omit<InsertMedication, 'userId'>): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const existing = await db.select().from(medications)
+    .where(and(eq(medications.userId, userId), eq(medications.localId, data.localId)))
+    .limit(1);
+  
+  if (existing[0]) {
+    await db.update(medications)
+      .set({ ...data, userId })
+      .where(eq(medications.id, existing[0].id));
+    return existing[0].id;
+  } else {
+    const result = await db.insert(medications).values({ ...data, userId });
+    return Number(result[0].insertId);
+  }
+}
+
+export async function deleteMedication(userId: number, localId: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(medications)
+    .where(and(eq(medications.userId, userId), eq(medications.localId, localId)));
 }

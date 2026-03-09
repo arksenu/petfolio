@@ -243,6 +243,10 @@ export function PetProvider({ children }: { children: ReactNode }) {
   const deleteReminderMutation = trpc.reminders.delete.useMutation();
   const addWeightMutation = trpc.weight.add.useMutation();
   const deleteWeightMutation = trpc.weight.delete.useMutation();
+  const upsertProviderMutation = trpc.providers.upsert.useMutation();
+  const deleteProviderMutation = trpc.providers.delete.useMutation();
+  const upsertMedMutation = trpc.medications.upsert.useMutation();
+  const deleteMedMutation = trpc.medications.delete.useMutation();
 
   // Load data from AsyncStorage on mount
   useEffect(() => {
@@ -334,15 +338,56 @@ export function PetProvider({ children }: { children: ReactNode }) {
           createdAt: w.createdAt ? new Date(w.createdAt).toISOString() : new Date().toISOString(),
         }));
         
+        // Map vet providers from cloud
+        // vetProviders table stores petLocalId (string) not numeric petId
+        const providers = (cloudData.providers || []).map((prov: any) => ({
+          id: prov.localId,
+          petId: prov.petLocalId || petIdMap.get(prov.petId) || prov.localId,
+          clinicName: prov.clinicName,
+          phone: prov.phone || undefined,
+          address: prov.address || undefined,
+          providerType: prov.providerType || 'primary_vet',
+          notes: prov.notes || undefined,
+          createdAt: prov.createdAt ? new Date(prov.createdAt).toISOString() : new Date().toISOString(),
+          updatedAt: prov.updatedAt ? new Date(prov.updatedAt).toISOString() : new Date().toISOString(),
+        }));
+        
+        // Attach providers to their pets
+        const petsWithProviders = pets.map(p => ({
+          ...p,
+          vetProviders: providers.filter((prov: any) => prov.petId === p.id),
+        }));
+        
+        // Map medications from cloud
+        // medications table stores petLocalId (string) in addition to numeric petId
+        const medications: Medication[] = (cloudData.medications || []).map((m: any) => ({
+          id: m.localId,
+          petId: m.petLocalId || petIdMap.get(m.petId) || m.localId,
+          name: m.name,
+          dosage: m.dosage || '',
+          frequency: m.frequency || 'once_daily',
+          instructions: m.instructions || undefined,
+          startDate: m.startDate ? new Date(m.startDate).toISOString() : new Date().toISOString(),
+          endDate: m.endDate ? new Date(m.endDate).toISOString() : undefined,
+          isOngoing: m.isOngoing ?? true,
+          pillsRemaining: m.pillsRemaining ?? undefined,
+          pillsPerRefill: m.pillsPerRefill ?? undefined,
+          refillReminderAt: m.refillReminderAt ?? undefined,
+          doseLog: m.doseLog ? (typeof m.doseLog === 'string' ? JSON.parse(m.doseLog) : m.doseLog) : [],
+          createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : new Date().toISOString(),
+          updatedAt: m.updatedAt ? new Date(m.updatedAt).toISOString() : new Date().toISOString(),
+        }));
+        
         // Merge cloud data into local state
         dispatch({
           type: 'MERGE_CLOUD_DATA',
           payload: {
-            pets,
+            pets: petsWithProviders,
             documents,
             vaccinations,
             reminders,
             weightHistory,
+            medications,
           },
         });
         
@@ -481,6 +526,42 @@ export function PetProvider({ children }: { children: ReactNode }) {
         });
       }
       
+      // Sync vet providers
+      for (const pet of state.pets) {
+        if (pet.vetProviders) {
+          for (const provider of pet.vetProviders) {
+            await upsertProviderMutation.mutateAsync({
+              localId: provider.id,
+              petLocalId: pet.id,
+              clinicName: provider.clinicName,
+              phone: provider.phone || null,
+              address: provider.address || null,
+              providerType: provider.providerType || 'primary_vet',
+              notes: provider.notes || null,
+            });
+          }
+        }
+      }
+      
+      // Sync medications
+      for (const med of state.medications) {
+        await upsertMedMutation.mutateAsync({
+          localId: med.id,
+          petLocalId: med.petId,
+          name: med.name,
+          dosage: med.dosage,
+          frequency: med.frequency,
+          instructions: med.instructions || null,
+          startDate: new Date(med.startDate),
+          endDate: med.endDate ? new Date(med.endDate) : null,
+          isOngoing: med.isOngoing,
+          pillsRemaining: med.pillsRemaining ?? null,
+          pillsPerRefill: med.pillsPerRefill ?? null,
+          refillReminderAt: med.refillReminderAt ?? null,
+          doseLog: med.doseLog || null,
+        });
+      }
+      
       const syncTime = new Date().toISOString();
       await AsyncStorage.setItem(STORAGE_KEYS.LAST_SYNC, syncTime);
       dispatch({ type: 'SET_LAST_SYNC', payload: syncTime });
@@ -489,7 +570,7 @@ export function PetProvider({ children }: { children: ReactNode }) {
       console.error('Sync failed:', error);
       dispatch({ type: 'SET_SYNCING', payload: false });
     }
-  }, [isAuthenticated, state.isSyncing, state.pets, state.documents, state.vaccinations, state.reminders, state.weightHistory]);
+  }, [isAuthenticated, state.isSyncing, state.pets, state.documents, state.vaccinations, state.reminders, state.weightHistory, state.medications]);
 
   // Pet actions
   async function addPet(petData: Omit<Pet, 'id' | 'createdAt' | 'updatedAt'>): Promise<Pet> {
@@ -541,6 +622,25 @@ export function PetProvider({ children }: { children: ReactNode }) {
           photoUri: updatedPet.photoUri || null,
           microchipNumber: updatedPet.microchipNumber || null,
         });
+        
+        // Sync vet providers if present
+        if (updatedPet.vetProviders) {
+          for (const provider of updatedPet.vetProviders) {
+            try {
+              await upsertProviderMutation.mutateAsync({
+                localId: provider.id,
+                petLocalId: updatedPet.id,
+                clinicName: provider.clinicName,
+                phone: provider.phone || null,
+                address: provider.address || null,
+                providerType: provider.providerType || 'primary_vet',
+                notes: provider.notes || null,
+              });
+            } catch (provErr) {
+              console.error('Failed to sync vet provider to cloud:', provErr);
+            }
+          }
+        }
       } catch (error) {
         console.error('Failed to sync pet update to cloud:', error);
       }
@@ -872,6 +972,25 @@ export function PetProvider({ children }: { children: ReactNode }) {
         updatedAt: new Date().toISOString(),
       };
       dispatch({ type: 'UPDATE_PET', payload: updatedPet });
+      
+      // Also sync the pet's weight field to cloud
+      if (isAuthenticated) {
+        try {
+          await upsertPetMutation.mutateAsync({
+            localId: updatedPet.id,
+            name: updatedPet.name,
+            species: updatedPet.species,
+            breed: updatedPet.breed || null,
+            dateOfBirth: updatedPet.dateOfBirth ? new Date(updatedPet.dateOfBirth) : null,
+            weight: updatedPet.weight?.toString() || null,
+            weightUnit: updatedPet.weightUnit,
+            photoUri: updatedPet.photoUri || null,
+            microchipNumber: updatedPet.microchipNumber || null,
+          });
+        } catch (error) {
+          console.error('Failed to sync pet weight to cloud:', error);
+        }
+      }
     }
     
     if (isAuthenticated) {
@@ -921,16 +1040,69 @@ export function PetProvider({ children }: { children: ReactNode }) {
       updatedAt: now,
     };
     dispatch({ type: 'ADD_MEDICATION', payload: medication });
+    
+    if (isAuthenticated) {
+      try {
+        await upsertMedMutation.mutateAsync({
+          localId: medication.id,
+          petLocalId: medication.petId,
+          name: medication.name,
+          dosage: medication.dosage,
+          frequency: medication.frequency,
+          instructions: medication.instructions || null,
+          startDate: new Date(medication.startDate),
+          endDate: medication.endDate ? new Date(medication.endDate) : null,
+          isOngoing: medication.isOngoing,
+          pillsRemaining: medication.pillsRemaining ?? null,
+          pillsPerRefill: medication.pillsPerRefill ?? null,
+          refillReminderAt: medication.refillReminderAt ?? null,
+          doseLog: medication.doseLog || null,
+        });
+      } catch (error) {
+        console.error('Failed to sync medication to cloud:', error);
+      }
+    }
+    
     return medication;
   }
 
   async function updateMedication(medication: Medication): Promise<void> {
     const updatedMed = { ...medication, updatedAt: new Date().toISOString() };
     dispatch({ type: 'UPDATE_MEDICATION', payload: updatedMed });
+    
+    if (isAuthenticated) {
+      try {
+        await upsertMedMutation.mutateAsync({
+          localId: updatedMed.id,
+          petLocalId: updatedMed.petId,
+          name: updatedMed.name,
+          dosage: updatedMed.dosage,
+          frequency: updatedMed.frequency,
+          instructions: updatedMed.instructions || null,
+          startDate: new Date(updatedMed.startDate),
+          endDate: updatedMed.endDate ? new Date(updatedMed.endDate) : null,
+          isOngoing: updatedMed.isOngoing,
+          pillsRemaining: updatedMed.pillsRemaining ?? null,
+          pillsPerRefill: updatedMed.pillsPerRefill ?? null,
+          refillReminderAt: updatedMed.refillReminderAt ?? null,
+          doseLog: updatedMed.doseLog || null,
+        });
+      } catch (error) {
+        console.error('Failed to sync medication update to cloud:', error);
+      }
+    }
   }
 
   async function deleteMedication(id: string): Promise<void> {
     dispatch({ type: 'DELETE_MEDICATION', payload: id });
+    
+    if (isAuthenticated) {
+      try {
+        await deleteMedMutation.mutateAsync({ localId: id });
+      } catch (error) {
+        console.error('Failed to delete medication from cloud:', error);
+      }
+    }
   }
 
   function getMedicationsForPet(petId: string): Medication[] {
@@ -938,24 +1110,54 @@ export function PetProvider({ children }: { children: ReactNode }) {
   }
 
   async function logDose(medicationId: string, skipped: boolean = false, notes?: string): Promise<void> {
-    const doseLog: DoseLog = {
+    const doseLogEntry: DoseLog = {
       id: generateId(),
       medicationId,
       takenAt: new Date().toISOString(),
       skipped,
       notes,
     };
-    dispatch({ type: 'LOG_DOSE', payload: { medicationId, doseLog } });
+    dispatch({ type: 'LOG_DOSE', payload: { medicationId, doseLog: doseLogEntry } });
     
     // Update pills remaining if tracking
     const medication = state.medications.find((m) => m.id === medicationId);
-    if (medication && medication.pillsRemaining !== undefined && !skipped) {
+    if (medication) {
+      const newDoseLog = [...medication.doseLog, doseLogEntry];
+      const newPillsRemaining = (medication.pillsRemaining !== undefined && !skipped)
+        ? Math.max(0, medication.pillsRemaining - 1)
+        : medication.pillsRemaining;
       const updatedMed = {
         ...medication,
-        pillsRemaining: Math.max(0, medication.pillsRemaining - 1),
+        doseLog: newDoseLog,
+        pillsRemaining: newPillsRemaining,
         updatedAt: new Date().toISOString(),
       };
-      dispatch({ type: 'UPDATE_MEDICATION', payload: updatedMed });
+      if (newPillsRemaining !== medication.pillsRemaining) {
+        dispatch({ type: 'UPDATE_MEDICATION', payload: updatedMed });
+      }
+      
+      // Sync the full medication (with updated doseLog) to cloud
+      if (isAuthenticated) {
+        try {
+          await upsertMedMutation.mutateAsync({
+            localId: updatedMed.id,
+            petLocalId: updatedMed.petId,
+            name: updatedMed.name,
+            dosage: updatedMed.dosage,
+            frequency: updatedMed.frequency,
+            instructions: updatedMed.instructions || null,
+            startDate: new Date(updatedMed.startDate),
+            endDate: updatedMed.endDate ? new Date(updatedMed.endDate) : null,
+            isOngoing: updatedMed.isOngoing,
+            pillsRemaining: updatedMed.pillsRemaining ?? null,
+            pillsPerRefill: updatedMed.pillsPerRefill ?? null,
+            refillReminderAt: updatedMed.refillReminderAt ?? null,
+            doseLog: updatedMed.doseLog,
+          });
+        } catch (error) {
+          console.error('Failed to sync dose log to cloud:', error);
+        }
+      }
     }
   }
 
