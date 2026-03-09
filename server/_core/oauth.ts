@@ -176,7 +176,22 @@ export function registerOAuthRoutes(app: Express) {
 
   app.post("/api/auth/logout", (req: Request, res: Response) => {
     const cookieOptions = getSessionCookieOptions(req);
+    // Clear cookie on the computed domain (e.g., .us2.manus.computer)
     res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+    
+    // Also clear cookie on broader parent domains that may have been set by the OAuth portal
+    // e.g., .manus.computer — the portal sets a cookie here that our normal clearCookie misses
+    const hostname = req.hostname;
+    const parts = hostname.split(".");
+    if (parts.length >= 3) {
+      // Clear on the broadest parent domain (e.g., .manus.computer)
+      const broadDomain = "." + parts.slice(-2).join(".");
+      if (broadDomain !== cookieOptions.domain) {
+        res.clearCookie(COOKIE_NAME, { ...cookieOptions, domain: broadDomain, maxAge: -1 });
+      }
+      // Also try without domain (current hostname only)
+      res.clearCookie(COOKIE_NAME, { ...cookieOptions, domain: undefined, maxAge: -1 });
+    }
     res.json({ success: true });
   });
 

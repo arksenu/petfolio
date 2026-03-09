@@ -173,3 +173,6 @@
 ## Bug Fixes (v3.6)
 - [x] Fix sign out with "clear local data" still not clearing pet data on web preview (restoreFromCloud race + logout ordering)
 - [x] Fix web preview always signing in as dariomazhara87 — expected behavior: Manus OAuth is single-identity tied to Manus account
+
+## Bug Fixes (v3.7)
+- [x] Fix stale account identity after re-login: clear app_session_id cookie on both .us2.manus.computer and .manus.computer domains during logout
