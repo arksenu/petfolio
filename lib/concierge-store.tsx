@@ -5,6 +5,7 @@ import { trpc } from './trpc';
 import type { ConciergeRequest, ConciergeMessage, VetProvider } from '@/shared/pet-types';
 
 const STORAGE_KEY = '@petfolio_concierge';
+const SYNC_INTERVAL_MS = 10_000; // Poll every 10 seconds
 
 // ==================== STATE ====================
 
@@ -174,6 +175,8 @@ interface ConciergeContextValue {
   addProvider: (petId: string, provider: Omit<VetProvider, 'id' | 'createdAt' | 'updatedAt'>) => VetProvider;
   updateProvider: (petId: string, provider: VetProvider) => void;
   deleteProvider: (petId: string, providerId: string) => void;
+  // Sync
+  syncFromCloud: () => Promise<void>;
   // Clear all data
   clearAllData: () => Promise<void>;
 }
@@ -186,7 +189,9 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { user, isAuthenticated } = useAuth();
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isClearingRef = useRef(false);
+  const isSyncingRef = useRef(false);
 
   // tRPC mutations for cloud sync
   const createRequestMutation = trpc.concierge.createRequest.useMutation();
@@ -194,10 +199,6 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
   const listRequestsQuery = trpc.concierge.listRequests.useQuery(undefined, {
     enabled: false, // Only fetch manually
   });
-  const getMessagesMutation = trpc.concierge.getMessages.useQuery(
-    { requestLocalId: '' },
-    { enabled: false }
-  );
 
   // Generate unique IDs
   const generateId = useCallback(() => {
@@ -239,15 +240,40 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  // Restore concierge data from cloud when user signs in and local requests are empty
-  useEffect(() => {
-    if (isAuthenticated && state.initialized && state.requests.length === 0 && !isClearingRef.current) {
-      restoreFromCloud();
+  // Fetch messages for a single request from the server
+  async function fetchMessagesForRequest(requestLocalId: string): Promise<ConciergeMessage[]> {
+    try {
+      const msgResult = await fetch(
+        `${getApiBaseUrl()}/api/trpc/concierge.getMessages?input=${encodeURIComponent(JSON.stringify({ json: { requestLocalId } }))}`,
+        {
+          credentials: 'include',
+          headers: await getAuthHeaders(),
+        }
+      );
+      if (msgResult.ok) {
+        const msgData = await msgResult.json();
+        const messages = msgData?.result?.data?.json || [];
+        return messages.map((m: any) => ({
+          id: m.localId,
+          requestId: requestLocalId,
+          senderType: m.senderType || 'user',
+          messageType: m.messageType || 'text',
+          content: m.content || '',
+          audioUrl: m.audioUrl || undefined,
+          audioDuration: m.audioDuration || undefined,
+          createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : new Date().toISOString(),
+        }));
+      }
+    } catch (err) {
+      console.error('[ConciergeStore] Failed to fetch messages for request:', requestLocalId, err);
     }
-  }, [isAuthenticated, state.initialized, state.requests.length]);
+    return [];
+  }
 
-  async function restoreFromCloud() {
-    if (!isAuthenticated) return;
+  // Sync all concierge data from the cloud (requests + messages)
+  async function syncFromCloud() {
+    if (!isAuthenticated || isSyncingRef.current || isClearingRef.current) return;
+    isSyncingRef.current = true;
 
     try {
       const result = await listRequestsQuery.refetch();
@@ -269,31 +295,7 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
         // Fetch messages for each request
         const messagesByRequest: Record<string, ConciergeMessage[]> = {};
         for (const req of requests) {
-          try {
-            const msgResult = await fetch(
-              `${getApiBaseUrl()}/api/trpc/concierge.getMessages?input=${encodeURIComponent(JSON.stringify({ json: { requestLocalId: req.id } }))}`,
-              {
-                credentials: 'include',
-                headers: await getAuthHeaders(),
-              }
-            );
-            if (msgResult.ok) {
-              const msgData = await msgResult.json();
-              const messages = msgData?.result?.data?.json || [];
-              messagesByRequest[req.id] = messages.map((m: any) => ({
-                id: m.localId,
-                requestId: req.id,
-                senderType: m.senderType || 'user',
-                messageType: m.messageType || 'text',
-                content: m.content || '',
-                audioUrl: m.audioUrl || undefined,
-                audioDuration: m.audioDuration || undefined,
-                createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : new Date().toISOString(),
-              }));
-            }
-          } catch (msgErr) {
-            console.error('[ConciergeStore] Failed to fetch messages for request:', req.id, msgErr);
-          }
+          messagesByRequest[req.id] = await fetchMessagesForRequest(req.id);
         }
 
         dispatch({
@@ -302,9 +304,45 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
         });
       }
     } catch (error) {
-      console.error('[ConciergeStore] Failed to restore from cloud:', error);
+      console.error('[ConciergeStore] Failed to sync from cloud:', error);
+    } finally {
+      isSyncingRef.current = false;
     }
   }
+
+  // Initial restore when user signs in and local state is empty
+  useEffect(() => {
+    if (isAuthenticated && state.initialized && state.requests.length === 0 && !isClearingRef.current) {
+      syncFromCloud();
+    }
+  }, [isAuthenticated, state.initialized, state.requests.length]);
+
+  // Periodic sync — poll every SYNC_INTERVAL_MS when authenticated
+  useEffect(() => {
+    if (isAuthenticated && state.initialized) {
+      // Clear any existing interval
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+      // Start polling
+      syncIntervalRef.current = setInterval(() => {
+        syncFromCloud();
+      }, SYNC_INTERVAL_MS);
+
+      return () => {
+        if (syncIntervalRef.current) {
+          clearInterval(syncIntervalRef.current);
+          syncIntervalRef.current = null;
+        }
+      };
+    } else {
+      // Not authenticated — clear interval
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+        syncIntervalRef.current = null;
+      }
+    }
+  }, [isAuthenticated, state.initialized]);
 
   // Persist on state changes
   useEffect(() => {
@@ -482,6 +520,7 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
     addProvider,
     updateProvider,
     deleteProvider,
+    syncFromCloud,
     clearAllData,
   };
 
