@@ -6,10 +6,10 @@
 - [x] Set up navigation structure
 
 ## Authentication
-- [ ] Sign up screen with email/password
-- [ ] Sign in screen
-- [ ] Google OAuth integration
-- [ ] Auth state management
+- [x] Manus OAuth sign-in (login.tsx, account.tsx)
+- [x] Auth state management (lib/auth-context.tsx)
+- [x] Cookie-based web auth + token-based native auth
+- [x] Dev-only auth bypass for Expo Go (EXPO_PUBLIC_DEV_SESSION_TOKEN)
 
 ## Home Dashboard
 - [x] Pet cards list with FlatList
@@ -35,7 +35,7 @@
 - [x] Camera capture for documents
 - [x] Gallery upload for documents
 - [x] Category selector dropdown
-- [ ] Document preview
+- [x] Document preview (view-document/[id].tsx)
 
 ## Vaccinations Tab
 - [x] Vaccination list with status indicators
@@ -51,7 +51,7 @@
 - [x] Reminder list
 - [x] Add custom reminder
 - [x] Toggle reminder on/off
-- [ ] Push notification setup for reminders
+- [x] Push notification setup for reminders (lib/notifications.ts)
 
 ## Sharing
 - [x] Share profile screen
@@ -61,8 +61,8 @@
 
 ## Settings
 - [x] Settings screen layout
-- [ ] Account management section
-- [ ] Notification preferences
+- [x] Account management section (account.tsx)
+- [x] Notification preferences (notification-settings.tsx)
 - [ ] Data export option
 - [ ] Delete account option
 
@@ -79,7 +79,7 @@
 - [x] Push notifications for reminders
 - [x] Push notifications for vaccination expiration warnings
 - [x] User authentication (sign up, sign in)
-- [ ] Cloud sync with backend database
+- [x] Cloud sync with backend database (pet-store.tsx + concierge-store.tsx tRPC mutations)
 
 ## Bug Fixes (v1.2)
 - [x] Fix date picker - date wheel not visible in modal on iOS

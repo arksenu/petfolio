@@ -4,192 +4,148 @@ This document provides comprehensive context for future Manus instances working 
 
 ## Project Overview
 
-Petfolio is a pet health records management app. Users can track multiple pets, store documents (vet records, lab results, prescriptions), manage vaccinations with expiration tracking, log medications with dosing schedules, and set reminders. The app supports optional cloud sync when users sign in.
+Petfolio is a pet health records management app built with Expo SDK 54. Users can track multiple pets, store documents (vet records, lab results, prescriptions), manage vaccinations with expiration tracking, log medications with dosing schedules, track weight history, manage vet providers, and set reminders. A concierge feature allows users to submit requests (text or voice) that are handled by a human operator. The app supports optional cloud sync when users sign in via Manus OAuth.
 
 ## Architecture Summary
 
 ### Frontend (Expo/React Native)
 
-The app uses Expo SDK 54 with Expo Router for file-based navigation. Key architectural decisions:
+Expo SDK 54 with Expo Router for file-based navigation. NativeWind (Tailwind CSS) for styling.
 
-1. **State Management**: Uses React Context (`PetProvider` in `lib/pet-store.tsx`) with `useReducer` for all pet data. This is a large file (~900 lines) that handles:
-   - Local state for pets, documents, vaccinations, medications, reminders, weight history
-   - AsyncStorage persistence
-   - Cloud sync operations via tRPC
-   - Action dispatching for all CRUD operations
+**State Management:**
 
-2. **Authentication**: Managed by `AuthProvider` in `lib/auth-context.tsx`:
-   - Web: Cookie-based auth (cookies set by API server)
-   - Native: Token-based auth (stored in SecureStore)
-   - OAuth flow differs by platform (see OAuth section below)
+| Store | File | Scope | Persistence |
+|-------|------|-------|-------------|
+| Pet data | `lib/pet-store.tsx` | Pets, documents, vaccinations, medications, reminders, weight history | AsyncStorage + tRPC cloud sync |
+| Concierge | `lib/concierge-store.tsx` | Requests, messages, vet providers | AsyncStorage + tRPC cloud sync |
+| Auth | `lib/auth-context.tsx` | User session, login state | SecureStore (native) / cookies (web) |
+| Theme | `lib/theme-provider.tsx` | Light/dark mode | System preference |
 
-3. **Styling**: NativeWind (Tailwind CSS for React Native). Theme colors defined in `theme.config.js`. Use semantic tokens like `bg-background`, `text-foreground`, `bg-primary`.
+**Navigation Structure:**
 
-4. **Navigation Structure**:
-   ```
-   (tabs)/
-     index.tsx        → Home (pet list)
-     settings.tsx     → Settings
-   pet/[id].tsx       → Pet profile with tabs (Records, Vaccinations, Medications, Reminders)
-   add-*.tsx          → Form screens
-   account.tsx        → User account (sign in/out)
-   login.tsx          → OAuth login screen
-   ```
+```
+(tabs)/
+  index.tsx              → Home (pet list)
+  requests.tsx           → Concierge request list
+  settings.tsx           → Settings
+pet/[id].tsx             → Pet profile (Records, Vaccinations, Medications, Reminders tabs)
+add-pet.tsx              → Add pet form
+edit-pet/[id].tsx        → Edit pet form
+add-document/[petId].tsx → Add document form
+add-vaccination/[petId].tsx → Add vaccination form
+add-medication/[petId].tsx  → Add medication form
+add-reminder/[petId].tsx    → Add reminder form
+weight-history/[petId].tsx  → Weight history + add entry
+vet-providers/[petId].tsx   → Vet provider management
+new-request.tsx          → New concierge request (text/voice)
+request-thread/[id].tsx  → Concierge chat thread
+share/[petId].tsx        → Share pet profile
+search.tsx               → Document search
+view-document/[id].tsx   → Document viewer
+account.tsx              → User account (sign in/out)
+login.tsx                → OAuth login screen
+notification-settings.tsx → Notification preferences
+dev/theme-lab.tsx        → Dev-only theme preview
+oauth/callback.tsx       → OAuth callback handler
+```
 
 ### Backend (Express + tRPC)
 
-Located in `server/` directory:
+Located in `server/` directory. Express on port 3000, tRPC for type-safe API.
 
-1. **API Server** (`server/_core/index.ts`): Express server on port 3000 with CORS enabled
-2. **tRPC Router** (`server/routers.ts`): Defines all API procedures for sync operations
-3. **Database** (`server/db.ts`): Drizzle ORM operations for PostgreSQL
-4. **OAuth** (`server/_core/oauth.ts`): OAuth callback handlers and session management
-5. **Cookies** (`server/_core/cookies.ts`): Cookie domain extraction for cross-subdomain auth
+**Key server files:**
 
-### Database Schema
+| File | Purpose |
+|------|---------|
+| `server/_core/index.ts` | Express server entry, CORS, tRPC middleware |
+| `server/routers.ts` | All tRPC procedures (pets, documents, vaccinations, medications, reminders, weight, providers, concierge, voice, sync, file) |
+| `server/db.ts` | Drizzle ORM database operations |
+| `server/storage.ts` | S3 file upload/download |
+| `server/_core/oauth.ts` | OAuth callback handlers, session JWT |
+| `server/_core/cookies.ts` | Cookie domain extraction |
+| `server/_core/voiceTranscription.ts` | Audio transcription via platform API |
+| `server/_core/llm.ts` | LLM integration (built-in, no API key needed) |
+| `server/_core/notification.ts` | Push notification delivery |
 
-Located in `drizzle/schema.ts`. Tables:
-- `users` - User accounts (id, openId, name, email, loginMethod, lastSignedIn)
-- `pets` - Pet records linked to users
-- `documents` - Document records linked to pets
-- `vaccinations` - Vaccination records linked to pets
-- `medications` - Medication records linked to pets
-- `reminders` - Reminder records linked to pets
-- `weightHistory` - Weight tracking linked to pets
+### Database Schema (MySQL via Drizzle ORM)
 
-## Critical Implementation Details
+Located in `drizzle/schema.ts`. All tables use `localId` (varchar) for client-side sync mapping and `userId` (int) for ownership.
 
-### OAuth Flow
+| Table | Key Columns | Notes |
+|-------|-------------|-------|
+| `users` | id, openId, name, email, role | Manus OAuth identity |
+| `pets` | id, localId, userId, name, species, breed, weight | Pet profiles |
+| `petDocuments` | id, localId, petId, userId, title, category, fileUri | Medical records, uses numeric petId |
+| `vaccinations` | id, localId, petId, userId, name, dateAdministered, expirationDate | Uses numeric petId |
+| `reminders` | id, localId, petId, userId, title, date, isEnabled | Uses numeric petId |
+| `weightHistory` | id, localId, petId, userId, weight, date | Uses numeric petId |
+| `medications` | id, localId, petId, userId, petLocalId, name, dosage, frequency, doseLog (JSON) | Has both petId and petLocalId |
+| `vetProviders` | id, localId, userId, petLocalId, clinicName, phone, providerType | Uses petLocalId (string) |
+| `conciergeRequests` | id, localId, userId, petLocalId, status, preview, messageCount | Uses petLocalId (string) |
+| `conciergeMessages` | id, localId, requestId (numeric), userId, senderType, content, audioUrl | requestId references conciergeRequests.id |
 
-**Web Platform:**
-1. User clicks "Sign In" → redirects to Manus OAuth portal
-2. User authenticates → redirected to `/api/oauth/callback` on API server (3000)
-3. Server exchanges code for token, creates session JWT, sets cookie with domain `.sg1.manus.computer`
-4. Server redirects to frontend (8081)
-5. Frontend calls `/api/auth/me` with cookie → gets user info
+**Critical: petId mapping inconsistency.** Some tables use numeric `petId` (FK to pets.id), others use string `petLocalId` (matches pets.localId). The `restoreFromCloud` function in pet-store.tsx builds a `petIdMap` (numeric → localId) to translate. When syncing TO cloud, the DB functions like `addWeightEntry` call `getPetByLocalId(userId, petLocalId)` to resolve the numeric petId.
 
-**Native Platform (Expo Go limitation):**
-- OAuth DOES NOT WORK in Expo Go because the OAuth provider rejects the `exp://` scheme
-- Users see a warning message on the login screen explaining this
-- For native OAuth to work, must build standalone app with custom scheme (`manus{timestamp}://`)
+### Cloud Sync Architecture
 
-**Mobile Web Issue (UNRESOLVED):**
-- Sign-in completes but session cookie not recognized on subsequent requests
-- Likely third-party cookie blocking issue
-- Cookie domain is set correctly (`.sg1.manus.computer`) but mobile browsers may block it
-- Desktop Chrome works fine, mobile Chrome/Safari have issues
+**Two stores, two sync patterns:**
 
-### Cloud Sync Logic
+1. **pet-store.tsx** (pets, documents, vaccinations, medications, reminders, weight):
+   - Upload: Each CRUD function calls its tRPC mutation inline (e.g., `upsertPetMutation.mutateAsync(...)`)
+   - `syncWithCloud()`: Full push of all data to server (called manually or on certain events)
+   - `restoreFromCloud()`: Fetches all data via `sync.getData` query when user signs in and local data is empty
+   - Errors are caught and logged, never block the UI
 
-In `lib/pet-store.tsx`:
+2. **concierge-store.tsx** (requests, messages):
+   - Upload: `createRequest` and `addMessage` call tRPC mutations inline when authenticated
+   - `restoreFromCloud()`: Fetches requests via `concierge.listRequests`, then fetches messages per request via raw fetch to `concierge.getMessages`
+   - Triggers when authenticated + initialized + no local requests
 
-1. **Upload**: When authenticated, CRUD operations call `syncToCloud()` which uses tRPC mutations
-2. **Download**: On sign-in, `restoreFromCloud()` fetches all user data if local state is empty
-3. **Merge**: `MERGE_CLOUD_DATA` action merges cloud data with local state
+### Authentication
 
-Key sync functions:
-- `syncPetToCloud()` - Syncs a single pet
-- `syncDocumentToCloud()` - Syncs a document (uploads file to S3 first if local)
-- `restoreFromCloud()` - Fetches all data from cloud on sign-in
+**Web:** Cookie-based. OAuth callback sets `app_session_id` cookie on `.manus.computer` domain. Frontend calls `/api/auth/me` with cookie.
 
-### Document Storage
+**Native:** Token-based. Stored in SecureStore. Sent as `Authorization: Bearer` header.
 
-Documents can be:
-1. **Local**: Stored on device (file:// or ph:// URIs)
-2. **Remote**: Uploaded to S3 when signed in (https:// URLs)
+**OAuth flow:** Manus OAuth portal → `/api/oauth/callback` → JWT session → redirect to frontend.
 
-The `syncDocumentToCloud()` function handles uploading local files to S3 via the `file.upload` tRPC mutation.
-
-### Date Picker
-
-Custom date picker implementation in `components/custom-date-picker.tsx` because:
-- Native iOS date picker doesn't work properly in Expo Go
-- Uses three scrollable wheels (month, day, year)
-- Handles date constraints (min/max dates)
-
-### PDF Viewer
-
-`components/pdf-viewer.tsx` uses different strategies:
-- **Native**: WebView with Google Docs viewer for remote PDFs, or opens externally for local files
-- **Web**: Currently broken - WebView doesn't work on web platform
-
-## Known Bugs to Fix
-
-### High Priority
-
-1. **Delete buttons not working (web)**: All delete icons (pet, document, vaccination, medication, reminder) do nothing on web. The handlers likely use `Alert.alert()` which doesn't work on web. Need to use `window.confirm()` or a custom modal for web.
-
-2. **PDF viewer on web**: `react-native-webview` doesn't support web. Need to implement an iframe-based viewer or use `react-pdf` library.
-
-3. **Log Dose button**: Same issue as delete - likely using `Alert.alert()`.
-
-4. **Mobile web sign-in**: Cookie not being stored/read. May need to implement token-based auth for mobile web (store in localStorage instead of cookies).
-
-### Medium Priority
-
-5. **Settings features not implemented**: Export Data, Privacy, Delete All Data buttons are placeholders.
-
-6. **QR code generation**: Share screen has QR option but not implemented.
-
-7. **PDF export**: Share screen has PDF export option but not implemented.
+**Limitation:** OAuth does NOT work in Expo Go (`exp://` scheme rejected). Dev bypass available via `EXPO_PUBLIC_DEV_SESSION_TOKEN`.
 
 ## File Locations for Common Tasks
 
 | Task | File(s) |
 |------|---------|
-| Add new pet field | `lib/pet-store.tsx` (type + reducer), `app/add-pet.tsx` (form) |
-| Add new screen | `app/` directory, update navigation if needed |
+| Add new pet field | `shared/pet-types.ts` (type), `lib/pet-store.tsx` (reducer + CRUD), `drizzle/schema.ts` (DB), `server/routers.ts` (API) |
+| Add new screen | `app/` directory (file-based routing) |
 | Modify theme colors | `theme.config.js` |
-| Add tab bar icon | `components/ui/icon-symbol.tsx` (add mapping first!) |
-| Add API endpoint | `server/routers.ts` |
-| Modify database schema | `drizzle/schema.ts`, then run `pnpm db:push` |
+| Add tab bar icon | `components/ui/icon-symbol.tsx` (add mapping FIRST) |
+| Add API endpoint | `server/routers.ts` (procedure), `server/db.ts` (DB function) |
+| Modify database schema | `drizzle/schema.ts`, then `pnpm db:push` |
 | Fix web-specific issue | Check for `Platform.OS === 'web'` conditions |
+| Cross-platform confirm | Use `lib/confirm.ts` (wraps Alert.alert for native, window.confirm for web) |
+| File upload | `server/storage.ts` + `file.upload` tRPC mutation |
+| Push notifications | `lib/notifications.ts` (client), `server/_core/notification.ts` (server) |
 
-## Testing Approach
+## Shared Types
 
-1. **Unit tests**: Located in `tests/` directory, run with `pnpm test`
-2. **Web preview**: Best for testing auth flow and cloud sync
-3. **Expo Go**: Best for testing native features (camera, haptics)
-4. **Manual testing**: Check both light and dark modes
+All client-side data models are in `shared/pet-types.ts`. Key interfaces: `Pet`, `PetDocument`, `Vaccination`, `Medication`, `DoseLog`, `WeightEntry`, `Reminder`, `ConciergeRequest`, `ConciergeMessage`, `VetProvider`.
 
-## Environment Details
+## Testing
 
-- **Metro (frontend)**: Port 8081, URL pattern `https://8081-{sandboxid}.{region}.manus.computer`
-- **API server**: Port 3000, URL pattern `https://3000-{sandboxid}.{region}.manus.computer`
-- **Database**: PostgreSQL via Drizzle ORM
-- **File storage**: S3-compatible storage via Manus platform
+- **Unit tests**: `tests/` directory, run with `pnpm test` (vitest)
+- **Web preview**: Best for testing auth flow and cloud sync
+- **Expo Go**: Best for testing native features (camera, haptics)
+- **Current test suites**: auth.logout, cloud-sync, concierge, concierge-sync, notifications, voice-recording
 
-## Common Pitfalls
-
-1. **Pressable className**: Never use `className` on Pressable components - use `style` prop instead (NativeWind limitation)
-
-2. **Alert.alert on web**: Doesn't work - use `window.confirm()` or custom modal
-
-3. **WebView on web**: Doesn't render anything - need platform-specific implementation
-
-4. **Cookie domain**: Must include region subdomain (`.sg1.manus.computer`) for cross-subdomain sharing
-
-5. **Icon mapping**: Must add icon to `components/ui/icon-symbol.tsx` BEFORE using in tab bar
-
-6. **Date picker**: Don't use native date picker in Expo Go - use custom component
-
-## Recommended Next Steps
-
-1. Fix delete functionality by replacing `Alert.alert()` with web-compatible dialogs
-2. Implement web PDF viewer using iframe or react-pdf
-3. Fix Log Dose button
-4. Investigate mobile web auth (may need localStorage-based tokens)
-5. Implement Export Data, Privacy, Delete All Data in settings
-
-## Useful Commands
+## Commands
 
 ```bash
-pnpm dev          # Start both Metro and API server
-pnpm test         # Run unit tests
-pnpm db:push      # Apply database schema changes
+pnpm dev          # Start both Metro (8081) and API server (3000)
+pnpm test         # Run vitest unit tests
 pnpm check        # TypeScript type checking
+pnpm db:push      # Generate + apply database migrations
 ```
 
 ---
 
-*Last updated: January 29, 2026*
+*Last updated: March 9, 2026*

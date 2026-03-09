@@ -45,7 +45,7 @@ Petfolio is an owner-controlled digital portfolio for pet medical records, vacci
 ### 3. Pet Profile Screen
 - **Header**: Large pet photo (editable), name, breed, age, weight
 - **Info Bar**: Microchip number, species icon
-- **Tab Navigation**: Records | Vaccinations | Reminders
+- **Tab Navigation**: Records | Vaccinations | Medications | Reminders
 - **Edit Button**: Top-right to edit pet details
 
 ### 4. Records Tab (within Pet Profile)
@@ -181,8 +181,13 @@ Petfolio is an owner-controlled digital portfolio for pet medical records, vacci
 - Yellow (#F59E0B): 1-30 days remaining
 - Red (#EF4444): Expired
 
-### Tab Bar
-- 3 tabs: Records, Vaccinations, Reminders
+### Tab Bar (Bottom)
+- 3 tabs: My Pets (home), Requests (concierge), Settings
+- Active: Teal icon + label
+- Inactive: Muted icon + label
+
+### Pet Profile Tabs (Segmented)
+- 4 segments: Records, Vaccinations, Medications, Reminders
 - Active: Teal underline, teal text
 - Inactive: Muted text
 
@@ -193,24 +198,31 @@ Petfolio is an owner-controlled digital portfolio for pet medical records, vacci
 - Position: Bottom-right, 16px margin
 - Shadow: Subtle elevation
 
-## Navigation Structure
+## Navigation Structure (Actual)
 
 ```
 Tab Navigator (Main)
-├── Home (Dashboard)
-│   └── Pet Profile (Stack)
-│       ├── Records Tab
-│       │   └── Add Document
-│       ├── Vaccinations Tab
-│       │   └── Add/Edit Vaccination
-│       ├── Reminders Tab
-│       │   └── Add Reminder
-│       └── Share Profile
-├── Add Pet (Modal)
-└── Settings
-    ├── Account
-    ├── Notifications
-    └── Data Management
+├── My Pets (index.tsx)
+│   └── Pet Profile (pet/[id].tsx)
+│       ├── Records Tab → Add Document (add-document/[petId].tsx)
+│       ├── Vaccinations Tab → Add Vaccination (add-vaccination/[petId].tsx)
+│       ├── Medications Tab → Add Medication (add-medication/[petId].tsx)
+│       ├── Reminders Tab → Add Reminder (add-reminder/[petId].tsx)
+│       ├── Weight History (weight-history/[petId].tsx)
+│       ├── Vet Providers (vet-providers/[petId].tsx)
+│       └── Share Profile (share/[petId].tsx)
+├── Requests (requests.tsx)
+│   ├── New Request (new-request.tsx)
+│   └── Request Thread (request-thread/[id].tsx)
+├── Settings (settings.tsx)
+│   ├── Account (account.tsx)
+│   └── Notification Settings (notification-settings.tsx)
+├── Add Pet (add-pet.tsx)
+├── Edit Pet (edit-pet/[id].tsx)
+├── Search (search.tsx)
+├── View Document (view-document/[id].tsx)
+├── Login (login.tsx)
+└── OAuth Callback (oauth/callback.tsx)
 ```
 
 ## Data Models

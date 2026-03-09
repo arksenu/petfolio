@@ -1,104 +1,105 @@
 # Petfolio Known Issues
 
-This document tracks known bugs and limitations in the current version of Petfolio.
+This document tracks known bugs, limitations, and architectural debt in the current version of Petfolio.
 
-## Critical Bugs
+## Open Bugs
 
-### Delete Functionality Not Working (Desktop/Mobile Web)
+### weightHistory Table Empty in DB
 
-**Affected Features:**
-- Delete pet button (trash icon in pet profile header)
-- Delete document button
-- Delete vaccination button
-- Delete medication button
-- Delete reminder button
+**Symptoms:** When a user adds a weight entry, the `pets.weight` column updates correctly in the DB, but the `weightHistory` table remains empty. Weight history entries restore correctly after re-login because they persist in AsyncStorage, not the database.
 
-**Symptoms:**
-Pressing the delete icons does nothing. No confirmation dialog appears and no deletion occurs.
+**Cause:** `addWeightMutation.mutateAsync()` in `pet-store.tsx` silently fails. The error is caught and logged but never surfaces. The `addWeightEntry` DB function works correctly when called directly (verified via manual SQL insert). Likely a date serialization or superjson transport issue between client and server.
 
-**Likely Cause:**
-The delete handlers may be using `Alert.alert()` which doesn't work on web platforms, or the `onPress` handlers may not be properly connected.
+**Impact:** Weight history is not backed up to cloud. If user clears local data, weight history is lost.
 
-**Priority:** High
+**Priority:** Medium
 
 ---
 
 ### PDF Viewer Not Working on Web
 
-**Symptoms:**
-When viewing a PDF document on the desktop web preview, an error message appears at the top of the screen: "React Native WebView does not support this platform."
+**Symptoms:** Viewing a PDF document on web shows "React Native WebView does not support this platform."
 
-**Cause:**
-The `react-native-webview` package is used for PDF viewing, but it doesn't support the web platform. The WebView component renders nothing on web.
+**Cause:** `react-native-webview` does not support the web platform. The `components/pdf-viewer.tsx` component has no web fallback.
 
-**Workaround:**
-PDFs work correctly in Expo Go (opens in iOS file preview) and would work in a standalone build.
+**Workaround:** PDFs work in Expo Go (opens externally) and standalone builds.
 
-**Solution Needed:**
-Implement a web-specific PDF viewer using an iframe with Google Docs viewer or a library like `react-pdf`.
+**Priority:** Low (most users on mobile)
+
+---
+
+### Mobile Safari Sign-In Session Not Persisted
+
+**Symptoms:** Sign-in completes on mobile Safari but session cookie is not recognized on subsequent requests.
+
+**Cause:** Third-party cookie blocking. The API server (port 3000) and frontend (port 8081) are on different subdomains. Mobile Safari blocks cross-subdomain cookies by default.
+
+**Workaround:** Use desktop Chrome for web testing. Native builds use token-based auth (SecureStore) which avoids this issue.
+
+**Priority:** Low (affects only mobile web preview, not production)
+
+---
+
+### Vaccinations May Not Restore from Cloud on Login
+
+**Symptoms:** After clearing local data and re-logging in, vaccinations that exist in the DB may not appear in the UI.
+
+**Cause:** Not fully diagnosed. The `restoreFromCloud` function maps vaccinations using `petIdMap.get(v.petId)` where `v.petId` is the numeric DB pet ID. If the petIdMap is not built correctly, the mapping fails silently.
 
 **Priority:** Medium
 
 ---
 
-### Log Dose Button Not Working
+### Cloud Sync: Pet Profile Changes May Not Persist
 
-**Symptoms:**
-Clicking the "Log Dose" button on a medication does nothing.
+**Symptoms:** Editing a pet's profile (name, breed, etc.) may not persist to the server DB after logout/login cycle.
 
-**Likely Cause:**
-The `onPress` handler may be using `Alert.alert()` for confirmation, which doesn't work on web.
+**Cause:** The `updatePet` function in `pet-store.tsx` calls `upsertPetMutation` but the mutation may fail silently if the data shape doesn't match the server's expected input.
 
-**Priority:** Medium
+**Priority:** Medium (tracked in todo.md v3.8)
 
 ---
 
-## Platform-Specific Limitations
+## Platform Limitations
 
-### Expo Go OAuth Sign-In Not Supported
+### Expo Go OAuth Not Supported
 
-**Symptoms:**
-When trying to sign in from Expo Go, the OAuth flow fails with "redirect_uri scheme 'exp' is not allowed."
+OAuth provider rejects `exp://` URL scheme. Users must use web preview or build a standalone app for sign-in.
 
-**Cause:**
-The OAuth provider (Manus) does not allow the `exp://` URL scheme that Expo Go uses for deep linking. This is a security restriction on the OAuth provider side.
+**Status:** Cannot be fixed — OAuth provider restriction.
 
-**Workarounds:**
-1. Use the web preview URL for sign-in (full OAuth support)
-2. Build a standalone app with `expo prebuild` and run through Xcode/Android Studio
+### Alert.alert() on Web
 
-**Status:** Cannot be fixed - OAuth provider restriction
+`Alert.alert()` does not work on web. All confirmation dialogs must use `lib/confirm.ts` which wraps `window.confirm()` on web.
 
----
+**Status:** Resolved for all known instances. New code must use `confirmAction()` from `lib/confirm.ts`.
 
-## Settings Features Not Implemented
+### Pressable className
 
-The following settings features are placeholders and not yet implemented:
+NativeWind's `className` prop does not work on `Pressable` components. Always use the `style` prop for Pressable.
 
-- **Export Data** - Export all pet data to a file
-- **Privacy** - Privacy settings and data management
-- **Delete All Data** - Button exists but functionality not implemented
+**Status:** Globally disabled via `lib/_core/nativewind-pressable.ts`.
 
----
+### Date Picker in Expo Go
 
-## Notes
+Native iOS date picker doesn't work properly in Expo Go. Custom date picker (`components/custom-date-picker.tsx`) with scrollable wheels is used instead.
 
-### Web vs Native Behavior Differences
+**Status:** Resolved with custom component.
 
-| Feature | Web | Expo Go | Standalone Build |
-|---------|-----|---------|------------------|
-| Sign In/Out | Works | Not available | Works |
-| Delete actions | Not working | Works (Alert.alert) | Works |
-| PDF viewing | Not working | Opens externally | Works |
-| Cloud sync | Works | Not available | Works |
-| Haptic feedback | No | Yes | Yes |
+## Architectural Debt
 
-### Testing Recommendations
+### petId Mapping Inconsistency
 
-1. **Desktop Web Preview**: Best for testing sign-in flow and cloud sync
-2. **Expo Go**: Best for testing native features (camera, haptics, local storage)
-3. **Standalone Build**: Required for full production testing
+Some DB tables use numeric `petId` (FK to `pets.id`), others use string `petLocalId` (matches `pets.localId`). This creates complexity in the `restoreFromCloud` function which must build a mapping between the two. New tables should prefer `petLocalId` for consistency with the client-side model.
+
+### Concierge Message Restore Uses Raw Fetch
+
+`concierge-store.tsx` restores messages using raw `fetch()` instead of the tRPC client because the `getMessages` query requires a dynamic `requestLocalId` parameter that can't be set up as a static hook for multiple requests. This bypasses superjson deserialization.
+
+### Two Separate Stores
+
+Pet data and concierge data are in separate React Context stores (`pet-store.tsx` and `concierge-store.tsx`). Both independently manage AsyncStorage persistence and cloud sync. Vet providers exist in both stores (concierge-store for the concierge UI, pet-store for the pet profile sync). This creates potential data divergence.
 
 ---
 
-*Last updated: January 28, 2026*
+*Last updated: March 9, 2026*
