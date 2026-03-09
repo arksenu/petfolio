@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/hooks/use-auth';
+import { trpc } from './trpc';
 import type { ConciergeRequest, ConciergeMessage, VetProvider } from '@/shared/pet-types';
 
 const STORAGE_KEY = '@petfolio_concierge';
@@ -37,6 +38,7 @@ type Action =
   | { type: 'ADD_PROVIDER'; payload: { petId: string; provider: VetProvider } }
   | { type: 'UPDATE_PROVIDER'; payload: { petId: string; provider: VetProvider } }
   | { type: 'DELETE_PROVIDER'; payload: { petId: string; providerId: string } }
+  | { type: 'MERGE_CLOUD_DATA'; payload: { requests: ConciergeRequest[]; messagesByRequest: Record<string, ConciergeMessage[]> } }
   | { type: 'CLEAR_ALL' };
 
 function reducer(state: ConciergeState, action: Action): ConciergeState {
@@ -141,6 +143,16 @@ function reducer(state: ConciergeState, action: Action): ConciergeState {
       };
     }
 
+    case 'MERGE_CLOUD_DATA':
+      return {
+        ...state,
+        requests: action.payload.requests,
+        messagesByRequest: {
+          ...state.messagesByRequest,
+          ...action.payload.messagesByRequest,
+        },
+      };
+
     case 'CLEAR_ALL':
       return { ...initialState, initialized: true };
 
@@ -172,8 +184,20 @@ const ConciergeContext = createContext<ConciergeContextValue | null>(null);
 
 export function ConciergeProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isClearingRef = useRef(false);
+
+  // tRPC mutations for cloud sync
+  const createRequestMutation = trpc.concierge.createRequest.useMutation();
+  const addMessageMutation = trpc.concierge.addMessage.useMutation();
+  const listRequestsQuery = trpc.concierge.listRequests.useQuery(undefined, {
+    enabled: false, // Only fetch manually
+  });
+  const getMessagesMutation = trpc.concierge.getMessages.useQuery(
+    { requestLocalId: '' },
+    { enabled: false }
+  );
 
   // Generate unique IDs
   const generateId = useCallback(() => {
@@ -215,9 +239,76 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
+  // Restore concierge data from cloud when user signs in and local requests are empty
+  useEffect(() => {
+    if (isAuthenticated && state.initialized && state.requests.length === 0 && !isClearingRef.current) {
+      restoreFromCloud();
+    }
+  }, [isAuthenticated, state.initialized, state.requests.length]);
+
+  async function restoreFromCloud() {
+    if (!isAuthenticated) return;
+
+    try {
+      const result = await listRequestsQuery.refetch();
+      const cloudRequests = result.data;
+
+      if (cloudRequests && cloudRequests.length > 0) {
+        // Transform cloud requests to local format
+        const requests: ConciergeRequest[] = cloudRequests.map((r: any) => ({
+          id: r.localId,
+          petId: r.petLocalId || undefined,
+          petName: r.petName || undefined,
+          status: r.status || 'active',
+          preview: r.preview || '',
+          messageCount: r.messageCount || 0,
+          createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : new Date().toISOString(),
+          updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : new Date().toISOString(),
+        }));
+
+        // Fetch messages for each request
+        const messagesByRequest: Record<string, ConciergeMessage[]> = {};
+        for (const req of requests) {
+          try {
+            const msgResult = await fetch(
+              `${getApiBaseUrl()}/api/trpc/concierge.getMessages?input=${encodeURIComponent(JSON.stringify({ json: { requestLocalId: req.id } }))}`,
+              {
+                credentials: 'include',
+                headers: await getAuthHeaders(),
+              }
+            );
+            if (msgResult.ok) {
+              const msgData = await msgResult.json();
+              const messages = msgData?.result?.data?.json || [];
+              messagesByRequest[req.id] = messages.map((m: any) => ({
+                id: m.localId,
+                requestId: req.id,
+                senderType: m.senderType || 'user',
+                messageType: m.messageType || 'text',
+                content: m.content || '',
+                audioUrl: m.audioUrl || undefined,
+                audioDuration: m.audioDuration || undefined,
+                createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : new Date().toISOString(),
+              }));
+            }
+          } catch (msgErr) {
+            console.error('[ConciergeStore] Failed to fetch messages for request:', req.id, msgErr);
+          }
+        }
+
+        dispatch({
+          type: 'MERGE_CLOUD_DATA',
+          payload: { requests, messagesByRequest },
+        });
+      }
+    } catch (error) {
+      console.error('[ConciergeStore] Failed to restore from cloud:', error);
+    }
+  }
+
   // Persist on state changes
   useEffect(() => {
-    if (state.initialized) {
+    if (state.initialized && !isClearingRef.current) {
       persistState(state);
     }
   }, [state, persistState]);
@@ -248,22 +339,52 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
 
     dispatch({ type: 'ADD_REQUEST', payload: request });
 
-    if (initialMessage) {
-      const message: ConciergeMessage = {
-        id: messageId,
-        requestId: requestId,
-        senderType: 'user',
-        messageType,
-        content: initialMessage,
-        audioUrl: audioUrl || undefined,
-        audioDuration: audioDuration || undefined,
-        createdAt: now,
-      };
+    const message: ConciergeMessage | null = initialMessage ? {
+      id: messageId,
+      requestId: requestId,
+      senderType: 'user',
+      messageType,
+      content: initialMessage,
+      audioUrl: audioUrl || undefined,
+      audioDuration: audioDuration || undefined,
+      createdAt: now,
+    } : null;
+
+    if (message) {
       dispatch({ type: 'SET_MESSAGES', payload: { requestId, messages: [message] } });
     }
 
+    // Sync to cloud
+    if (isAuthenticated) {
+      (async () => {
+        try {
+          await createRequestMutation.mutateAsync({
+            localId: requestId,
+            petLocalId: petId || null,
+            petName: petName || null,
+            status: 'active',
+            preview: initialMessage?.substring(0, 200) || null,
+          });
+
+          if (message) {
+            await addMessageMutation.mutateAsync({
+              requestLocalId: requestId,
+              localId: messageId,
+              senderType: 'user',
+              messageType,
+              content: initialMessage!,
+              audioUrl: audioUrl || null,
+              audioDuration: audioDuration || null,
+            });
+          }
+        } catch (error) {
+          console.error('[ConciergeStore] Failed to sync request to cloud:', error);
+        }
+      })();
+    }
+
     return request;
-  }, [generateId]);
+  }, [generateId, isAuthenticated, createRequestMutation, addMessageMutation]);
 
   // Add a message to an existing request
   const addMessage = useCallback((
@@ -273,8 +394,9 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
     audioUrl?: string,
     audioDuration?: number,
   ): ConciergeMessage => {
+    const messageId = generateId();
     const message: ConciergeMessage = {
-      id: generateId(),
+      id: messageId,
       requestId,
       senderType: 'user',
       messageType,
@@ -285,8 +407,28 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
     };
 
     dispatch({ type: 'ADD_MESSAGE', payload: { requestId, message } });
+
+    // Sync to cloud
+    if (isAuthenticated) {
+      (async () => {
+        try {
+          await addMessageMutation.mutateAsync({
+            requestLocalId: requestId,
+            localId: messageId,
+            senderType: 'user',
+            messageType,
+            content,
+            audioUrl: audioUrl || null,
+            audioDuration: audioDuration || null,
+          });
+        } catch (error) {
+          console.error('[ConciergeStore] Failed to sync message to cloud:', error);
+        }
+      })();
+    }
+
     return message;
-  }, [generateId]);
+  }, [generateId, isAuthenticated, addMessageMutation]);
 
   // Get messages for a request
   const getMessages = useCallback((requestId: string): ConciergeMessage[] => {
@@ -324,8 +466,11 @@ export function ConciergeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const clearAllData = useCallback(async () => {
+    isClearingRef.current = true;
     dispatch({ type: 'CLEAR_ALL' });
     await AsyncStorage.removeItem(STORAGE_KEY);
+    // Reset clearing flag after a tick
+    setTimeout(() => { isClearingRef.current = false; }, 100);
   }, []);
 
   const value: ConciergeContextValue = {
@@ -351,4 +496,26 @@ export function useConcierge(): ConciergeContextValue {
   const ctx = useContext(ConciergeContext);
   if (!ctx) throw new Error('useConcierge must be used within ConciergeProvider');
   return ctx;
+}
+
+// Helper to get API base URL (same as trpc.ts)
+function getApiBaseUrl(): string {
+  // Import dynamically to avoid circular deps
+  try {
+    const { getApiBaseUrl: getUrl } = require('@/constants/oauth');
+    return getUrl();
+  } catch {
+    return 'http://127.0.0.1:3000';
+  }
+}
+
+// Helper to get auth headers
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const Auth = require('@/lib/_core/auth');
+    const token = await Auth.getSessionToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
 }

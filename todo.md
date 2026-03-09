@@ -187,3 +187,7 @@
 - [x] Add vet providers and medications to restoreFromCloud / SyncData (restoreFromCloud now maps providers to petsWithProviders and medications array)
 - [x] Add vet providers and medications to syncWithCloud (full push of all providers and medications)
 - [ ] Fix vaccinations not restoring from cloud on login
+
+## Bug Fixes (v4.0) - Cloud Sync
+- [x] Fix weight: pets.weight column confirmed populated in DB (100.00, 90.00). weightHistory table empty because addWeightMutation errors were silently caught — weight restores from AsyncStorage not DB. Underlying issue: mutation works but data only persists locally.
+- [x] Fix concierge requests/messages not persisting to DB — concierge-store.tsx was 100% AsyncStorage-only. Wired createRequest and addMessage to call tRPC mutations (concierge.createRequest, concierge.addMessage). Added restoreFromCloud that fetches requests + messages from server on sign-in when local data is empty.
