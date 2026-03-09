@@ -127,6 +127,7 @@ export const conciergeRequests = mysqlTable("conciergeRequests", {
   status: varchar("status", { length: 32 }).default("active").notNull(),
   preview: text("preview"),
   messageCount: int("messageCount").default(1).notNull(),
+  assignedTo: int("assignedTo"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -150,6 +151,22 @@ export const conciergeMessages = mysqlTable("conciergeMessages", {
 
 export type ConciergeMessage = typeof conciergeMessages.$inferSelect;
 export type InsertConciergeMessage = typeof conciergeMessages.$inferInsert;
+
+// Message attachments table — files attached to concierge messages (S3 metadata)
+export const messageAttachments = mysqlTable("messageAttachments", {
+  id: int("id").autoincrement().primaryKey(),
+  messageId: int("messageId").notNull(),
+  requestId: int("requestId").notNull(),
+  fileKey: varchar("fileKey", { length: 512 }).notNull(),
+  url: text("url").notNull(),
+  filename: varchar("filename", { length: 255 }).notNull(),
+  mimeType: varchar("mimeType", { length: 128 }).notNull(),
+  size: int("size").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type MessageAttachment = typeof messageAttachments.$inferSelect;
+export type InsertMessageAttachment = typeof messageAttachments.$inferInsert;
 
 // Vet providers table
 export const vetProviders = mysqlTable("vetProviders", {

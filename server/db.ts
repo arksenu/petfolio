@@ -11,6 +11,7 @@ import {
   conciergeMessages, InsertConciergeMessage, ConciergeMessage,
   vetProviders, InsertVetProvider, VetProvider,
   medications, InsertMedication, MedicationRow,
+  messageAttachments, InsertMessageAttachment, MessageAttachment,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -478,6 +479,7 @@ export async function getAllPendingRequests(): Promise<Array<ConciergeRequest & 
       status: conciergeRequests.status,
       preview: conciergeRequests.preview,
       messageCount: conciergeRequests.messageCount,
+      assignedTo: conciergeRequests.assignedTo,
       createdAt: conciergeRequests.createdAt,
       updatedAt: conciergeRequests.updatedAt,
       userName: users.name,
