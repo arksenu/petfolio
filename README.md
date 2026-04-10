@@ -130,5 +130,4 @@ Pet data is managed through a React Context provider (`PetProvider`) with:
 2. Native: Deep link to OAuth portal → callback via custom scheme → token stored in SecureStore
 
 ## License
-
-Private - Manus Platform
+MIT
