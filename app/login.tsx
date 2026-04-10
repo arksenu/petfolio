@@ -1,23 +1,28 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Text, View, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
+import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/hooks/use-auth";
-import { startOAuthLogin } from "@/constants/oauth";
+import { startOAuthLogin, getApiBaseUrl } from "@/constants/oauth";
+import * as Auth from "@/lib/_core/auth";
 
 // Check if running in Expo Go
 const isExpoGo = Constants.appOwnership === "expo";
 
+const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? "";
+
 export default function LoginScreen() {
   const router = useRouter();
   const colors = useColors();
-  const { loading, isAuthenticated } = useAuth();
+  const { loading, isAuthenticated, setUser } = useAuth();
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   // If already authenticated, redirect to home
   useEffect(() => {
@@ -30,12 +35,79 @@ export default function LoginScreen() {
     return null;
   }
 
+  const handleGoogleLogin = async () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    setGoogleLoading(true);
+    try {
+      const redirectUri = AuthSession.makeRedirectUri({ preferLocalhost: true });
+      const nonce = Math.random().toString(36).substring(2) + Date.now().toString(36);
+
+      const discovery = {
+        authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+        tokenEndpoint: "https://oauth2.googleapis.com/token",
+      };
+
+      const authRequest = new AuthSession.AuthRequest({
+        clientId: GOOGLE_CLIENT_ID,
+        redirectUri,
+        scopes: ["openid", "profile", "email"],
+        responseType: AuthSession.ResponseType.IdToken,
+        extraParams: { nonce },
+      });
+
+      const result = await authRequest.promptAsync(discovery);
+
+      if (result.type !== "success" || !result.params.id_token) {
+        if (result.type !== "cancel") {
+          Alert.alert("Sign-In Failed", "Could not complete Google sign-in. Please try again.");
+        }
+        return;
+      }
+
+      // Send the ID token to our backend to verify and create a session
+      const baseUrl = getApiBaseUrl();
+      const response = await fetch(`${baseUrl}/api/auth/google`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken: result.params.id_token }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Backend authentication failed");
+      }
+
+      const { sessionToken, user: userData } = await response.json();
+
+      // Store the session token and user info
+      await Auth.setSessionToken(sessionToken);
+      const userInfo: Auth.User = {
+        id: userData.id,
+        openId: userData.openId,
+        name: userData.name,
+        email: userData.email,
+        loginMethod: userData.loginMethod,
+        lastSignedIn: new Date(userData.lastSignedIn),
+      };
+      await Auth.setUserInfo(userInfo);
+      setUser(userInfo);
+
+      console.log("[Login] Google sign-in successful:", userInfo.email);
+    } catch (error) {
+      console.error("[Login] Google sign-in error:", error);
+      Alert.alert("Sign-In Error", "Something went wrong. Please try again.");
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   const handleLogin = async () => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
 
-    // On native platforms in Expo Go, show a message about the limitation
     if (Platform.OS !== "web" && isExpoGo) {
       Alert.alert(
         "Sign-In Not Available",
@@ -112,7 +184,6 @@ export default function LoginScreen() {
 
         {/* Actions */}
         <View style={styles.actions}>
-          {/* Show Expo Go warning if applicable */}
           {Platform.OS !== "web" && isExpoGo && (
             <View style={[styles.warningBanner, { backgroundColor: colors.warning + "20", borderColor: colors.warning }]}>
               <IconSymbol name="exclamationmark.triangle.fill" size={18} color={colors.warning} />
@@ -122,10 +193,28 @@ export default function LoginScreen() {
             </View>
           )}
 
+          {/* Google Sign-In */}
+          <TouchableOpacity
+            onPress={handleGoogleLogin}
+            style={styles.googleButton}
+            activeOpacity={0.8}
+            disabled={googleLoading}
+          >
+            {googleLoading ? (
+              <ActivityIndicator size="small" color="#1F1F1F" />
+            ) : (
+              <>
+                <Text style={styles.googleIcon}>G</Text>
+                <Text style={styles.googleButtonText}>Sign in with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Manus Sign-In */}
           <TouchableOpacity
             onPress={handleLogin}
             style={[
-              styles.loginButton, 
+              styles.loginButton,
               { backgroundColor: colors.primary },
               Platform.OS !== "web" && isExpoGo && styles.loginButtonDisabled
             ]}
@@ -252,6 +341,27 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     lineHeight: 18,
+  },
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#DADCE0",
+    backgroundColor: "#FFFFFF",
+    gap: 10,
+  },
+  googleIcon: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#4285F4",
+  },
+  googleButtonText: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#1F1F1F",
   },
   loginButton: {
     flexDirection: "row",

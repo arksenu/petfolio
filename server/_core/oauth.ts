@@ -1,8 +1,9 @@
 import { COOKIE_NAME, ONE_YEAR_MS } from "../../shared/const.js";
 import type { Express, Request, Response } from "express";
-import { getUserByOpenId, upsertUser } from "../db";
+import { getUserByOpenId, getUserByEmail, upsertUser } from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
+import axios from "axios";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -203,6 +204,67 @@ export function registerOAuthRoutes(app: Express) {
     } catch (error) {
       console.error("[Auth] /api/auth/me failed:", error);
       res.status(401).json({ error: "Not authenticated", user: null });
+    }
+  });
+
+  // Google Sign-In: verify Google ID token, upsert user, return session
+  app.post("/api/auth/google", async (req: Request, res: Response) => {
+    const { idToken } = req.body;
+    if (!idToken) {
+      res.status(400).json({ error: "idToken is required" });
+      return;
+    }
+
+    try {
+      // Verify the Google ID token by calling Google's tokeninfo endpoint
+      const { data: googleUser } = await axios.get(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
+      );
+
+      if (!googleUser.email) {
+        res.status(400).json({ error: "Google account has no email" });
+        return;
+      }
+
+      const googleOpenId = `google_${googleUser.sub}`;
+
+      // Check if a user with this email already exists (e.g., from Manus OAuth)
+      const existingByEmail = await getUserByEmail(googleUser.email);
+      const existingByOpenId = await getUserByOpenId(googleOpenId);
+
+      // Use the existing user's openId if they signed in via Manus before,
+      // otherwise use the Google-based openId
+      const openId = existingByEmail?.openId ?? existingByOpenId?.openId ?? googleOpenId;
+
+      await upsertUser({
+        openId,
+        name: googleUser.name || null,
+        email: googleUser.email,
+        loginMethod: "google",
+        lastSignedIn: new Date(),
+      });
+
+      const user = await getUserByOpenId(openId);
+      const sessionToken = await sdk.createSessionToken(openId, {
+        name: googleUser.name || "",
+        expiresInMs: ONE_YEAR_MS,
+      });
+
+      console.log("[Auth] Google sign-in successful for:", googleUser.email);
+
+      res.json({
+        sessionToken,
+        user: buildUserResponse(user ?? {
+          openId,
+          name: googleUser.name,
+          email: googleUser.email,
+          loginMethod: "google",
+          lastSignedIn: new Date(),
+        }),
+      });
+    } catch (error) {
+      console.error("[Auth] Google sign-in failed:", error);
+      res.status(401).json({ error: "Invalid Google token" });
     }
   });
 
