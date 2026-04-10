@@ -63,3 +63,6 @@ Thumbs.db
 .claude/
 .env
 CLAUDE.md
+package-lock.json
+context.md
+.manus/db/

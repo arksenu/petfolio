@@ -11,9 +11,9 @@ This document tracks known bugs, limitations, and architectural debt in the curr
 **Cause:** Cloud sync calls in `pet-store.tsx` are wrapped in try/catch blocks that log errors to console but never propagate them to the UI. The functions always return success regardless of whether the server mutation succeeded.
 
 **Affected operations:**
-- Adding weight entries (`addWeightEntry`, line ~957)
-- Updating pet profiles (`updatePet`, line ~608)
-- Potentially other mutations following the same pattern
+- Adding weight entries (`addWeightEntry`)
+- Updating pet profiles (`updatePet`)
+- Other mutations following the same pattern in `pet-store.tsx`
 
 **Impact:** Data not backed up to cloud. User has no indication of sync failure.
 
@@ -63,4 +63,4 @@ Pet data and concierge data are in separate React Context stores (`pet-store.tsx
 
 ---
 
-*Last updated: March 15, 2026*
+*Last updated: April 2026*
